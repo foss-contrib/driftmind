@@ -1,0 +1,30 @@
+{
+  "payloads_list": [
+    {
+      "forecaster_id": "b3921abf-6959-4170-a318-50ce92d55ef1",
+      "data": {
+        "sin": [
+          0.4,
+          0.5
+        ],
+        "cos": [
+          0.6,
+          0.5
+        ]
+      }
+    },
+    {
+      "forecaster_id": "nonexistent-forecaster-id",
+      "data": {
+        "sin": [
+          1.0,
+          2.0
+        ],
+        "cos": [
+          3.0,
+          4.0
+        ]
+      }
+    }
+  ]
+}

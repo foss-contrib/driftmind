@@ -1,0 +1,17 @@
+{
+  "status_code": 206,
+  "body": {
+    "results": [
+      {
+        "forecaster_id": "b3921abf-6959-4170-a318-50ce92d55ef1",
+        "status": 200,
+        "message": "FED"
+      },
+      {
+        "forecaster_id": "nonexistent-forecaster-id",
+        "status": 404,
+        "message": "FORECASTER_NOT_FOUND"
+      }
+    ]
+  }
+}

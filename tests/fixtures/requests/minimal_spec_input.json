@@ -1,0 +1,6 @@
+{
+  "forecaster_name": "Minimal Forecaster",
+  "features": ["vibration_g"],
+  "input_size": 30,
+  "output_size": 1
+}

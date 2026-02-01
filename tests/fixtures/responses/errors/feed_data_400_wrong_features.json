@@ -1,0 +1,9 @@
+{
+  "status_code": 400,
+  "body": {
+    "error": "BAD_REQUEST",
+    "details": [
+      "missing column sin"
+    ]
+  }
+}

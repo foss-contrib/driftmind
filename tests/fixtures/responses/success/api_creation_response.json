@@ -1,0 +1,15 @@
+{
+  "forecasterId": "fc-123",
+  "forecasterName": "Machine Health Forecaster",
+  "features": ["vibration_g", "motor_temp_c", "power_kw"],
+  "configuration": {
+    "fitRate": "1",
+    "initializationDate": "01-01-2025 00:00",
+    "maxClustersAllowed": "50",
+    "dateFormat": "dd-MM-yyyy HH:mm",
+    "similarityThreshold": "0.8",
+    "timeStampIntervalInSeconds": "30",
+    "outputSize": "1",
+    "inputSize": "30"
+  }
+}

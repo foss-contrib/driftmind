@@ -1,0 +1,13 @@
+{
+  "status_code": 417,
+  "body": {
+    "message": "NOT_PROCESSED",
+    "details": [
+      {
+        "forecasterId": "test-forecaster-redis",
+        "status": 500,
+        "message": "REDIS_UNAVAILABLE"
+      }
+    ]
+  }
+}

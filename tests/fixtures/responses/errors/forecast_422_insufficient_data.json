@@ -1,0 +1,7 @@
+{
+  "status_code": 422,
+  "body": {
+    "error": "FORECAST_NOT_READY",
+    "details": []
+  }
+}

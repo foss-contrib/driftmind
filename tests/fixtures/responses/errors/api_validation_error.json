@@ -1,0 +1,7 @@
+{
+  "error": "VALIDATION_FAILED",
+  "details": [
+    "Input length must be a positive integer.",
+    "Output length must be a positive integer."
+  ]
+}

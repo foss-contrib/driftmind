@@ -1,0 +1,9 @@
+{
+  "forecaster_name": "RecorderTest_Minimal",
+  "features": [
+    "sin",
+    "cos"
+  ],
+  "input_size": 10,
+  "output_size": 3
+}

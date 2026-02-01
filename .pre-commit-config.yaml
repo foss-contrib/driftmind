@@ -1,0 +1,9 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        exclude: '^(verify_api\.py|analyze_coverage\.py|api\.txt|api_reviewed\.txt|.*\.md)$'
+      - id: ruff-format
+        exclude: '^(verify_api\.py|analyze_coverage\.py|api\.txt|api_reviewed\.txt|.*\.md)$'
