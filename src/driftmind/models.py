@@ -1,114 +1,104 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Literal
 
-from dateutil import parser as date_parser
 from pydantic import (
+    AliasChoices,
+    AliasGenerator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     RootModel,
+    SerializationInfo,
     field_serializer,
     field_validator,
     model_validator,
 )
+from pydantic.alias_generators import to_camel
 
-from .utils import (
-    is_java_date_format,
-    java_to_python_date_format,
-    python_to_java_date_format,
-    to_camel,
-    to_snake,
+from .utils import convert_java_to_strftime, convert_strftime_to_java, smart_parse_date
+
+# Reusable type for date fields
+SmartDateTime = Annotated[datetime, BeforeValidator(smart_parse_date)]
+
+
+# Common config to handle snake_case <-> camelCase conversion
+common_config = ConfigDict(
+    alias_generator=AliasGenerator(
+        validation_alias=to_camel,
+        serialization_alias=to_camel,
+    ),
+    populate_by_name=True,
 )
 
 
-class ObjectInformation(BaseModel):
-    """Represents a tracked object in the DriftMind system."""
+class DriftMindObjectInformation(BaseModel):
+    """
+    Represents a tracked object in the DriftMind system, including metadata and statistics.
+    """
+
+    model_config = common_config
 
     object_id: str = Field(
         ...,
-        alias="objectId",
         description="Unique identifier of the object.",
         examples=["object-7e4b1a21"],
     )
-    object_name: str = Field(
-        ...,
-        alias="objectName",
+    object_name: str | None = Field(
+        None,
         description="Human-readable name assigned to the object.",
         examples=["Web Traffic Forecaster"],
     )
     created_at: str = Field(
         ...,
-        alias="createdAt",
         description="Date when the object was created, in format YYYY-MM-DD.",
         examples=["2025-09-14"],
     )
     created_by: str = Field(
         ...,
-        alias="createdBy",
         description="Developer token that created the object.",
         examples=["VfYZ3hLQk6FohdPTkKXB0lC30DworzI5Mz...."],
     )
     object_type: str = Field(
         ...,
-        alias="objectType",
         description="Type or category of the object (e.g., 'FORECASTER', 'OFFLINE DETECTOR', 'DATASET', etc).",
         examples=["FORECASTER"],
     )
     data_processed: float = Field(
         ...,
-        alias="dataProcessed",
         description="Amount of data processed by the object expressed in MB (human-readable).",
         examples=[14120.0],
     )
     requests_processed: int = Field(
-        ...,
-        alias="requestsProcessed",
         description="Number of API or internal requests handled by this object.",
         examples=[328],
     )
 
-    @field_validator("data_processed", mode="before")
-    @classmethod
-    def parse_float_string(cls, v: Any) -> float:
-        if isinstance(v, str):
-            # Remove commas and convert
-            return float(v.replace(",", ""))
-        return v
 
-    @field_validator("requests_processed", mode="before")
-    @classmethod
-    def parse_int_string(cls, v: Any) -> int:
-        if isinstance(v, str):
-            # Remove commas and convert
-            # We convert to float first in case string is "328.0", then to int
-            return int(float(v.replace(",", "")))
-        return v
+class DriftMindObjectInformationList(RootModel):
+    """
+    List response of DriftMindObjectInformation objects as returned by the retrieval endpoint.
+    """
+
+    root: list[DriftMindObjectInformation]
 
 
-class ObjectInformationList(RootModel[list[ObjectInformation]]):
-    """List response of tracked objects."""
+class ForecasterSettingsBase(BaseModel):
+    """
+    Common settings shared between creation requests and API responses.
+    """
 
-    root: list[ObjectInformation]
+    model_config = common_config
 
-
-class ForecasterConfigBase(BaseModel):
-    """Base configuration payload for creating DriftMind forecasters."""
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        extra="allow",
-        alias_generator=to_camel,
-    )
-
+    # Mandatory Fields
     input_size: int = Field(
         ...,
         description="Number of past time steps (input window size) to use for forecasting.",
         examples=[30],
-        gt=0,
+        ge=1,
     )
-
     output_size: int = Field(
         ...,
         description=(
@@ -116,21 +106,21 @@ class ForecasterConfigBase(BaseModel):
             "Must be less than inputSize."
         ),
         examples=[1],
-        gt=0,
+        ge=1,
     )
 
-    max_clusters_allowed: int = Field(
-        default=100,
+    # Optional Fields with Constraints
+    max_clusters_allowed: int | None = Field(
+        None,
         description=(
             "Maximum number of clusters allowed. Affects memory footprint "
             "and model complexity."
         ),
         examples=[50],
-        gt=0,
+        ge=1,
     )
-
-    similarity_threshold: float = Field(
-        default=0.8,
+    similarity_threshold: float | None = Field(
+        None,
         description=(
             "Clustering similarity threshold in [0.6, 1.0]. Controls how "
             "similar time series must be to be clustered together."
@@ -139,99 +129,34 @@ class ForecasterConfigBase(BaseModel):
         le=1.0,
         examples=[0.8],
     )
-
-    timestamp_interval_in_seconds: int = Field(
-        default=60,
+    timestamp_interval_in_seconds: int | None = Field(
+        None,
         description=(
             "Time interval (in seconds) between consecutive data points. "
             "Used to validate time-based assumptions."
         ),
+        alias="timeStampIntervalInSeconds",
         examples=[86400],
-        gt=0,
+        ge=1,
     )
-
-    fit_rate: int = Field(
-        default=1,
+    fit_rate: int | None = Field(
+        None,
         description=(
             "Number of data point insertions required to trigger a model fit operation."
         ),
         examples=[1],
-        gt=0,
+        ge=1,
     )
-
-    date_format: str = Field(
-        default="dd-MM-yyyy HH:mm",
-        description=(
-            "Java date format used for parsing timestamps."
-            "Will be converted to Python format for the client"
-        ),
-        examples=["dd-MM-yyyy HH:mm"],
-    )
-
-    initialization_date: str | None = Field(
-        default=None,
-        description=(
-            "Initialization date/time used when use_initialization_date is True. "
-            "Format must match date_format."
-        ),
-        examples=["01-01-2025 00:00"],
-    )
-
-    @field_validator("date_format", mode="before")
-    @classmethod
-    def deserialize_date_format(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            # Only convert if it actually looks like Java and NOT Python
-            if is_java_date_format(v):
-                return java_to_python_date_format(v)
-        return v
-
-    @model_validator(mode="before")
-    @classmethod
-    def convert_extra_camel_to_snake(cls, data: Any) -> Any:
-        """
-        Intercepts raw input data to convert camelCase keys to snake_case.
-        This ensures that 'extra' fields are stored in a Pythonic format.
-        """
-        if isinstance(data, dict):
-            return {to_snake(k): v for k, v in data.items()}
-        return data
-
-    @model_validator(mode="after")
-    def validate_constraints(self) -> ForecasterConfigBase:
-        if self.output_size >= self.input_size:
-            raise ValueError("output_size must be less than input_size")
-
-        return self
-
-
-class ForecasterConfig(ForecasterConfigBase):
-    """Configuration payload for creating a DriftMind forecaster."""
-
-    forecaster_name: str = Field(
-        ...,
-        description="Unique name for the forecaster to be created.",
-        examples=["Daily_revenue_predictor"],
-    )
-
-    features: list[str] = Field(
-        ...,
-        description="list of input features (column names) to be used for forecasting.",
-        examples=[["Product Category A", "Product Category B", "Product Category C"]],
-        min_length=1,
-    )
-
-    use_custom_date_format: bool = Field(
-        default=False,
+    use_custom_date_format: bool | None = Field(
+        None,
         description=(
             "If true, input data contains timestamps in a custom format, "
             "parsed using date_format."
         ),
         examples=[True],
     )
-
-    date_format: str = Field(
-        default="%d-%m-%Y %H:%M:%S",
+    date_format: str | None = Field(
+        None,
         description=(
             "Python strptime/strftime format used for parsing timestamps when "
             "use_custom_date_format is True."
@@ -239,67 +164,93 @@ class ForecasterConfig(ForecasterConfigBase):
         ),
         examples=["%d-%m-%Y %H:%M"],
     )
-
-    use_initialization_date: bool = Field(
-        default=False,
+    use_initialization_date: bool | None = Field(
+        None,
         description=(
             "If true, training is assumed to start at initialization_date; "
             "otherwise current system time is used."
         ),
         examples=[True],
     )
+    initialization_date: SmartDateTime | None = Field(
+        None,
+        description=(
+            "Initialization date/time used when use_initialization_date is True. "
+            "Format must match date_format."
+        ),
+    )
 
     @field_validator("date_format")
     @classmethod
-    def validate_python_format_string(cls, v: str) -> str:
+    def validate_python_format_string(cls, v: str | None) -> str | None:
         """Verify the string is a valid Python strftime format."""
+        if v is None:
+            return v
         try:
             # Attempt to format a dummy date to see if it's a valid pattern
             datetime.now().strftime(v)
-        except Exception as exc:
+        except (ValueError, TypeError) as exc:
             raise ValueError(f"Invalid Python date format string: {v}") from exc
         return v
 
-    @field_serializer("date_format", when_used="json")
-    def serialize_date_format(self, v: str) -> str:
-        """Converts Python strftime format to Java/Unicode format for the API."""
-        return python_to_java_date_format(v)
-
     @model_validator(mode="after")
-    def validate_constraints(self) -> ForecasterConfig:
-        super().validate_constraints()
+    def validate_logic_constraints(self) -> ForecasterSettingsBase:
+        """Cross-field validation for output_size and date configurations."""
+        # 1. outputSize <= inputSize constraint
+        if self.output_size > self.input_size:
+            raise ValueError("output_size must be less than or equal to input_size.")
 
-        if self.use_initialization_date:
-            if not self.initialization_date:
-                raise ValueError(
-                    "initialization_date must be provided when use_initialization_date is True."
-                )
+        # 2. Date format requirement
+        if self.use_custom_date_format and not self.date_format:
+            raise ValueError(
+                "date_format must be provided if use_custom_date_format is True."
+            )
 
-            # 3. Validate format against date_format
-            try:
-                # Internally we still use the Python % format to validate the input string
-                datetime.strptime(self.initialization_date, self.date_format)
-            except ValueError as exc:
-                raise ValueError(
-                    f"initialization_date='{self.initialization_date}' "
-                    f"does not match date_format='{self.date_format}'"
-                ) from exc
+        # 3. Initialization date requirement
+        if self.use_initialization_date and not self.initialization_date:
+            raise ValueError(
+                "initialization_date must be provided if use_initialization_date is True."
+            )
 
         return self
 
+    @field_serializer("date_format", when_used="json")
+    def serialize_date_format(
+        self, date_format: str | None, info: SerializationInfo
+    ) -> str | None:
+        """
+        Only converts to Java if the context explicitly asks for 'api' target.
+        Otherwise, keeps the Python format.
+        """
+        if date_format is None:
+            return None
 
-class ForecasterSpec(BaseModel):
-    model_config = ConfigDict(
-        populate_by_name=True,
-        alias_generator=to_camel,
-    )
+        # Check if we are dumping for the API or for internal Python use
+        if info.context and info.context.get("target") == "api":
+            return convert_strftime_to_java(date_format)
 
-    forecaster_id: str = Field(
-        ...,
-        alias="forecasterId",
-        description="Unique id for the forecaster created.",
-    )
+        return date_format
 
+    @field_serializer("initialization_date", when_used="json")
+    def serialize_initialization_date(
+        self, v: datetime | None, info: SerializationInfo
+    ) -> str | None:
+        if v is None:
+            return None
+
+        # Use date_format from the model instance
+        fmt = self.date_format if self.date_format else "%Y-%m-%d %H:%M:%S"
+        return v.strftime(fmt)
+
+
+class ForecasterSpec(ForecasterSettingsBase):
+    """
+    Configuration parameters required to create a new DriftMind forecaster.
+    """
+
+    model_config = common_config
+
+    forecaster_name: str = Field(..., description="Unique name for the forecaster.")
     features: list[str] = Field(
         ...,
         description="list of input features (column names) to be used for forecasting.",
@@ -307,144 +258,260 @@ class ForecasterSpec(BaseModel):
         min_length=1,
     )
 
-    forecaster_name: str = Field(
-        ...,
-        description="Unique name for the forecaster to be created.",
-        examples=["Daily_revenue_predictor"],
-    )
-
-    properties: ForecasterConfigBase = Field(
-        ...,
-        description="Effective configuration properties applied to the forecaster after defaults and normalization.",
-    )
-
-
-class TimeSeriesSegment(RootModel[dict[str, list[float]]]):
-    """Mapping from feature name to a list of floats with equal length."""
-
-    @model_validator(mode="after")
-    def validate_segment_integrity(self) -> TimeSeriesSegment:
-        # Check if the dictionary itself is empty
-        if not self.root:
-            raise ValueError("TimeSeriesSegment must contain at least one feature.")
-
-        # Get lengths of all lists
-        lengths = {key: len(values) for key, values in self.root.items()}
-
-        # Check if any list is empty (e.g., {"a": []})
-        if any(length == 0 for length in lengths.values()):
-            raise ValueError("Feature lists cannot be empty.")
-
-        # Check for alignment (equal length)
-        unique_lengths = set(lengths.values())
-        if len(unique_lengths) > 1:
-            length_summary = ", ".join([f"{k}({v})" for k, v in lengths.items()])
-            raise ValueError(
-                f"All feature lists must have the same length. Got: {length_summary}"
-            )
-
-        return self
-
-
-class TimeSeriesSnapshot(RootModel[dict[str, dict[str, float]]]):
-    """Mapping from timestamp string to a mapping of feature → float.
-
-    Example input::
-
-        {
-          "data": {
-            "01/05/2024 00:05:00": {"temperature": 42.5, "humidity": 77.1},
-            "01/05/2024 00:06:00": {"temperature": 38.2, "humidity": 75.0}
-          }
-        }
-
-    The model validates that:
-    - Each timestamp maps to a dict[str, float]
-    - All inner dicts have the same set of feature keys
-    """
-
-    @model_validator(mode="after")
-    def validate_consistent_features(self) -> TimeSeriesSnapshot:
-        if not self.root:
-            return self
-
-        # Use an iterator to get the first set of keys
-        data_iter = iter(self.root.items())
-        first_ts, first_features = next(data_iter)
-        expected_keys = set(first_features.keys())
-
-        # Only need to check the remaining items
-        for ts, features in data_iter:
-            if set(features.keys()) != expected_keys:
-                raise ValueError(
-                    f"Feature mismatch at timestamp '{ts}'. "
-                    f"Expected {sorted(expected_keys)}, but found {sorted(features.keys())}."
-                )
-
-        return self
-
-
-class TimeSeriesData(BaseModel):
-    """Container for time-indexed feature values, mapping each timestamp to a consistent set of float features."""
-
-    data: TimeSeriesSnapshot
-
-
-class ForecastResultPerFeature(BaseModel):
-    time_stamps: list[str] = Field(..., alias="timeStamps")
-    predictions: list[float]
-    upper_confidence: list[float] = Field(..., alias="upperConfidence")
-    lower_confidence: list[float] = Field(..., alias="lowerConfidence")
-    anomaly_score: float = Field(..., alias="anomalyScore")
-    forecasting_method: str = Field(..., alias="forecastingMethod")
-    number_of_clusters: int = Field(..., alias="numberOfClusters")
-
-    @field_validator("time_stamps")
+    @field_validator("features")
     @classmethod
-    def validate_time_stamps(cls, v: list[str]) -> list[str]:
-        for ts in v:
-            date_parser.parse(ts)
+    def validate_features(cls, v: list[str]) -> list[str]:
+        """Ensures features list is unique and strings are not blank."""
+        if len(v) != len(set(v)):
+            raise ValueError("Feature names must be unique.")
+        if any(not s.strip() for s in v):
+            raise ValueError("Feature names cannot be blank strings.")
         return v
 
+
+class ForecasterConfig(ForecasterSettingsBase):
+    """
+    Extends the Spec to handle the API's 'all-strings' response quirk.
+    Pydantic will automatically coerce strings like "30" to int 30.
+    """
+
+    @field_validator("date_format", mode="before")
+    @classmethod
+    def handle_java_date_conversion(cls, v: str | None) -> str | None:
+        """
+        Intersects the raw API value. If it's a Java-style string,
+        it converts it to Python style before the rest of the model sees it.
+        """
+        if isinstance(v, str) and "%" not in v:
+            return convert_java_to_strftime(v)
+        return v
+
+
+class ForecasterCreationResponse(BaseModel):
+    """
+    The full object returned by the GET/Retrieval endpoint.
+    """
+
+    model_config = common_config
+
+    forecaster_id: str = Field(..., description="Unique ID of the forecaster.")
+    forecaster_name: str = Field(..., description="Name of the forecaster.")
+    features: list[str] = Field(..., description="list of feature names.")
+
+    # Nested configuration dictionary from the API
+    configuration: ForecasterConfig = Field(
+        ..., description="The internal settings of the forecaster."
+    )
+
+
+class FeatureStats(BaseModel):
+    """
+    Detailed statistics for an individual feature within a forecaster.
+    """
+
+    model_config = common_config
+
+    anomaly_score: float
+    active_clusters: int
+    total_created_clusters: int
+    total_deleted_clusters: int
+    total_observations: int
+    total_time_series_processed: int
+    last_addition: str = Field(
+        ...,
+        validation_alias=AliasChoices("lastAddtion", "lastAddition"),
+        serialization_alias="lastAddition",
+        description="Timestamp of the last data addition.",
+    )
+
+
+class ForecasterDetails(BaseModel):
+    """
+    Complete description of a forecaster, including its identity,
+    operational configuration, and current feature statistics.
+    """
+
+    model_config = common_config
+
+    forecaster_id: str
+    forecaster_name: str
+
+    # Reusing the model that handles string-coercion and Java-to-Python date conversion
+    configuration: ForecasterConfig
+
+    # Dynamic dictionary where keys are feature names and values are FeatureStats
+    features: dict[str, FeatureStats]
+
+
+class DataFeedPayload(RootModel):
+    """
+    Represents a columnar dataset where keys are feature names and values are lists of numeric values.
+    """
+
+    root: dict[str, list[int | float]] = Field(
+        ...,
+        description="A dictionary mapping feature names to their respective numerical time-series data.",
+    )
+
     @model_validator(mode="after")
-    def validate_internal_lengths(self) -> ForecastResultPerFeature:
-        """Ensure all arrays within this feature result match."""
-        expected = len(self.time_stamps)
-        actuals = {
-            "predictions": len(self.predictions),
-            "upper_confidence": len(self.upper_confidence),
-            "lower_confidence": len(self.lower_confidence),
+    def validate_matrix_shape(self) -> DataFeedPayload:
+        if not self.root:
+            raise ValueError("Data dictionary cannot be empty.")
+
+        lengths = {key: len(val) for key, val in self.root.items()}
+        unique_lengths = set(lengths.values())
+
+        if 0 in unique_lengths:
+            raise ValueError("Lists cannot be empty.")
+
+        if len(unique_lengths) > 1:
+            raise ValueError(f"Inconsistent list lengths: {lengths}")
+
+        return self
+
+
+class ForecasterDataFeedEntry(BaseModel):
+    """
+    Payload used to feed a multivariate time series into a forecaster.
+    """
+
+    model_config = common_config
+
+    forecaster_id: str = Field(
+        ..., description="The unique identifier for the forecaster instance."
+    )
+    data: DataFeedPayload = Field(
+        ...,
+        description="A mapping of feature names to their aligned numeric time series.",
+    )
+
+
+class BulkDataFeedPayload(BaseModel):
+    """
+    Payload for bulk uploading multiple forecaster datasets in a single request.
+    """
+
+    model_config = common_config
+
+    payloads_list: list[ForecasterDataFeedEntry] = Field(
+        ...,
+        description="A list of forecaster entries to be processed in bulk.",
+        min_length=1,
+    )
+
+
+class StoredDataResponse(RootModel):
+    """
+    Response model for retrieving historical data.
+    Returns dict with timestamp keys mapping to feature dicts.
+    """
+
+    root: dict[str, dict[str, float]]
+
+
+class FeaturePrediction(BaseModel):
+    """
+    Detailed prediction results for an individual feature.
+    Automatically parses timestamps and ensures parallel array consistency.
+    """
+
+    model_config = common_config
+
+    # Using our custom type: Pydantic handles the parsing loop for us
+    timestamps: list[SmartDateTime] = Field(
+        ..., description="List of timestamps for the predicted points."
+    )
+    predictions: list[float] = Field(
+        ..., description="The predicted values for the feature."
+    )
+    upper_confidence: list[float] = Field(
+        ..., description="The upper bound of the prediction confidence interval."
+    )
+    lower_confidence: list[float] = Field(
+        ..., description="The lower bound of the prediction confidence interval."
+    )
+
+    anomaly_score: float = Field(..., description="Calculated anomaly score.")
+    forecasting_method: str = Field(..., description="Algorithm used.")
+    number_of_clusters: int = Field(..., description="Clusters identified.")
+
+    @model_validator(mode="after")
+    def validate_array_consistency(self) -> FeaturePrediction:
+        """Ensures all data arrays match the number of timestamps provided."""
+        expected_len = len(self.timestamps)
+
+        # We group the arrays to check their lengths in one pass
+        parallel_arrays = {
+            "predictions": self.predictions,
+            "upper_confidence": self.upper_confidence,
+            "lower_confidence": self.lower_confidence,
         }
-        for field, length in actuals.items():
-            if length != expected:
+
+        for name, array in parallel_arrays.items():
+            if len(array) != expected_len:
                 raise ValueError(
-                    f"Length mismatch: {field} has {length} items, but time_stamps has {expected}"
+                    f"Array '{name}' length ({len(array)}) must match "
+                    f"timestamps length ({expected_len})."
                 )
         return self
 
 
-class ForecastResponse(BaseModel):
-    """Forecast response with global metrics and per-feature results."""
+class PredictionResponse(BaseModel):
+    """
+    Top-level response for prediction requests, aggregating global scores and feature-specific results.
+    """
 
-    anomaly_score: float = Field(..., alias="anomalyScore")
-    number_of_clusters: int = Field(..., alias="numberOfClusters")
-    features_map: dict[str, ForecastResultPerFeature] = Field(..., alias="FeaturesMap")
+    model_config = common_config
 
-    @model_validator(mode="after")
-    def validate_cross_feature_consistency(self) -> ForecastResponse:
-        if not self.features_map:
-            return self
+    anomaly_score: float = Field(
+        ..., description="The global anomaly score across all features."
+    )
+    number_of_clusters: int = Field(
+        ..., description="Total number of clusters found in the global dataset."
+    )
+    features: dict[str, FeaturePrediction] = Field(
+        ...,
+        description="A mapping of feature names to their respective prediction details.",
+    )
 
-        # Get the length from the first feature in the map
-        iterator = iter(self.features_map.values())
-        first_feature = next(iterator)
-        expected_length = len(first_feature.time_stamps)
 
-        for name, feature in iterator:
-            actual_length = len(feature.time_stamps)
-            if actual_length != expected_length:
-                raise ValueError(
-                    f"Feature consistency error: '{name}' has {actual_length} points, "
-                    f"but first feature had {expected_length} points."
-                )
-        return self
+class ApiErrorResponse(BaseModel):
+    """Internal model to parse standard API error bodies."""
+
+    error: str = Field(
+        ...,
+        description="Error code provided by the API endpoint",
+        examples=["VALIDATION_FAILED"],
+    )
+    details: list[str] = Field(default_factory=list)
+
+
+class ForecasterDeletionResponse(BaseModel):
+    """Response from deleting a forecaster."""
+
+    message: Literal["FORECASTER_DELETED"]
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+
+class ForecasterOperationResult(BaseModel):
+    """Result of a single forecaster operation (deletion, feed, etc.)."""
+
+    forecaster_id: str = Field(alias="forecasterId")
+    status: int
+    message: str
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+
+class BulkOperationResponse(BaseModel):
+    """Response from a bulk operation on multiple forecasters."""
+
+    results: list[ForecasterOperationResult]
+
+    model_config = ConfigDict(extra="forbid")

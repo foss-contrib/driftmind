@@ -1,6 +1,3 @@
-from typing import Any
-
-
 class DriftMindError(Exception):
     """Base exception for DriftMind client errors."""
 
@@ -16,12 +13,22 @@ class DriftMindApiError(DriftMindError):
         self,
         status_code: int,
         message: str,
-        details: Any | None = None,
+        error_code: str | None = None,
+        details: list[str] | None = None,
     ) -> None:
         self.status_code = status_code
         self.message = message
-        self.details = details
-        super().__init__(f"[{status_code}] {message}")
+        self.error_code = error_code
+        self.details = details or []
+
+        # Construct a readable error message
+        prefix = f"[{status_code} {error_code}]" if error_code else f"[{status_code}]"
+        # If we have specific details (like validation issues), append them
+        full_msg = message
+        if self.details:
+            full_msg += f" | Details: {'; '.join(self.details)}"
+
+        super().__init__(f"{prefix} {full_msg}")
 
 
 class ForecasterCreationError(DriftMindApiError):
@@ -40,5 +47,9 @@ class ListObjectsError(DriftMindApiError):
     """Error returned by the DriftMind list objects endpoint."""
 
 
-class GetObjectDetailsError(DriftMindApiError):
-    """Error returned by the DriftMind get object details endpoint."""
+class GetForecasterDetailsError(DriftMindApiError):
+    """Error returned by the DriftMind get forecaster details endpoint."""
+
+
+class ForecasterDeletionError(DriftMindApiError):
+    """Error returned by the DriftMind delete forecaster endpoint"""

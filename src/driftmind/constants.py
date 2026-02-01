@@ -9,7 +9,7 @@ try:
     VERSION = version("driftmind")
 except PackageNotFoundError:
     # Fallback for development/editable installs
-    VERSION = "0.3.1.dev"
+    VERSION = "0.4.1.dev"
 
 # User Agent
 PYTHON_VERSION = (

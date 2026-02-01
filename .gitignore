@@ -1,5 +1,6 @@
 # IDE
 .vscode/
+.idea/
 
 # Data
 .data/raw/
@@ -22,6 +23,7 @@ ENV/
 .coverage
 htmlcov/
 .tox/
+.ruff_cache/
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
@@ -38,3 +40,18 @@ dist/
 # Environment files
 .env
 **/.env
+
+# OS Metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# MyPy
+.mypy_cache/

@@ -45,6 +45,17 @@ def generate_sin_cos_tan_with_drifts(
     first_break: Final[int] = n // 3
     second_break: Final[int] = 2 * n // 3
 
+    # Create segment masks
+    mask_0 = t < first_break
+    mask_1 = (t >= first_break) & (t < second_break)
+    mask_2 = t >= second_break
+
+    # Initialize arrays
+    sin_vals = np.zeros(n)
+    cos_vals = np.zeros(n)
+    tan_vals = np.zeros(n)
+
+    # Segment parameters
     segments: list[dict[str, float]] = [
         {
             "sin_amp": 1.0,
@@ -72,35 +83,23 @@ def generate_sin_cos_tan_with_drifts(
         },
     ]
 
-    def segment_index(idx: int) -> int:
-        if idx < first_break:
-            return 0
-        if idx < second_break:
-            return 1
-        return 2
+    # Apply segment-specific computations using vectorization
+    for _idx, (mask, cfg) in enumerate(
+        [(mask_0, segments[0]), (mask_1, segments[1]), (mask_2, segments[2])]
+    ):
+        t_seg = t[mask]
 
-    sin_vals: list[float] = []
-    cos_vals: list[float] = []
-    tan_vals: list[float] = []
+        sin_vals[mask] = cfg["sin_amp"] * np.sin(2 * np.pi * cfg["sin_freq"] * t_seg)
+        cos_vals[mask] = cfg["cos_amp"] * np.cos(2 * np.pi * cfg["cos_freq"] * t_seg)
 
-    for i in range(n):
-        cfg = segments[segment_index(i)]
+        tan_arg = 2 * np.pi * cfg["tan_freq"] * t_seg
+        tan_vals[mask] = np.clip(cfg["tan_amp"] * np.tan(tan_arg), -3.0, 3.0)
 
-        sin_val = cfg["sin_amp"] * np.sin(2 * np.pi * cfg["sin_freq"] * i)
-        cos_val = cfg["cos_amp"] * np.cos(2 * np.pi * cfg["cos_freq"] * i)
-
-        tan_arg = 2 * np.pi * cfg["tan_freq"] * i
-        tan_raw = cfg["tan_amp"] * np.tan(tan_arg)
-        tan_val = float(np.clip(tan_raw, -3.0, 3.0))
-
-        if noise_std > 0.0:
-            sin_val += float(rng.normal(0.0, noise_std))
-            cos_val += float(rng.normal(0.0, noise_std))
-            tan_val += float(rng.normal(0.0, noise_std))
-
-        sin_vals.append(float(sin_val))
-        cos_vals.append(float(cos_val))
-        tan_vals.append(float(tan_val))
+    # Add noise if specified
+    if noise_std > 0.0:
+        sin_vals += rng.normal(0.0, noise_std, n)
+        cos_vals += rng.normal(0.0, noise_std, n)
+        tan_vals += rng.normal(0.0, noise_std, n)
 
     df = pd.DataFrame(
         {

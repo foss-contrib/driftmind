@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import os
-import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import matplotlib.pyplot as plt
+from dateutil import parser as date_parser
 
-from .exceptions import DriftMindConfigError
+from ..exceptions import DriftMindConfigError
 
 try:
     from dotenv import load_dotenv
@@ -144,21 +145,20 @@ def plot_time_series(
     plt.show()
 
 
-def to_snake(string: str) -> str:
-    """Convert camelCase or PascalCase to snake_case."""
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", string).lower()
+def smart_parse_date(v: any) -> any:
+    """Parses ambiguous date strings using dateutil, favoring Day-First."""
+    if isinstance(v, str):
+        try:
+            # dayfirst=True handles the dd-mm-yyyy format correctly
+            return date_parser.parse(v, dayfirst=True)
+        except (ValueError, OverflowError):
+            return v
+    return v
 
 
-def to_camel(string: str) -> str:
-    """Convert snake_case to camelCase."""
-    components = string.split("_")
-    return components[0] + "".join(x.title() for x in components[1:])
-
-
-def python_to_java_date_format(python_format: str) -> str:
+def convert_strftime_to_java(fmt: str) -> str:
     """
-    Converts a Python strftime format string to a Java/Unicode LDML format string.
-    Example: '%d-%m-%Y %H:%M' -> 'dd-MM-yyyy HH:mm'
+    Maps common Python strftime tokens to Java SimpleDateFormat tokens.
     """
     mapping = {
         "%d": "dd",
@@ -168,38 +168,19 @@ def python_to_java_date_format(python_format: str) -> str:
         "%H": "HH",
         "%M": "mm",
         "%S": "ss",
+        "%f": "SSS",  # Python microseconds to Java milliseconds (approx)
+        "%z": "Z",
     }
-
-    # Create a regex pattern from the mapping keys
-    pattern = re.compile("|".join(re.escape(k) for k in mapping.keys()))
-
-    # Replace each match using the dictionary
-    return pattern.sub(lambda m: mapping[m.group(0)], python_format)
+    for py_token, java_token in mapping.items():
+        fmt = fmt.replace(py_token, java_token)
+    return fmt
 
 
-def is_java_date_format(format_str: str) -> bool:
+def convert_java_to_strftime(fmt: str) -> str:
     """
-    Returns True if the string looks like a Java/LDML date format.
-    Returns False if it contains Python tokens or no recognizable tokens.
+    Maps Java SimpleDateFormat tokens back to Python strftime tokens.
     """
-    # 1. If it contains '%', it is definitely a Python/C format
-    if "%" in format_str:
-        return False
-
-    # 2. Look for common Java/Unicode tokens: y, M, d, H, m, s
-    # We use a regex that looks for these letters while ignoring
-    # text wrapped in single quotes (which Java uses for escaping)
-    java_token_pattern = re.compile(r"[yMdhHmsS]")
-
-    return bool(java_token_pattern.search(format_str))
-
-
-def java_to_python_date_format(java_format: str) -> str:
-    """
-    Converts a Java/Unicode LDML date format string to a Python strftime string.
-    Example: 'dd-MM-yyyy HH:mm' -> '%d-%m-%Y %H:%M'
-    """
-    # Reverse mapping
+    # Note: Order matters here (yyyy before yy) to avoid partial replacement issues
     mapping = {
         "yyyy": "%Y",
         "yy": "%y",
@@ -208,14 +189,9 @@ def java_to_python_date_format(java_format: str) -> str:
         "HH": "%H",
         "mm": "%M",
         "ss": "%S",
+        "SSS": "%f",
+        "Z": "%z",
     }
-
-    # Sort keys by length descending (match 'yyyy' before 'yy')
-    pattern = re.compile(
-        "|".join(re.escape(k) for k in sorted(mapping.keys(), key=len, reverse=True))
-    )
-
-    # Remove Java's single quotes used for escaping text (e.g., 'T' -> T)
-    clean_format = java_format.replace("'", "")
-
-    return pattern.sub(lambda m: mapping[m.group(0)], clean_format)
+    for java_token, py_token in mapping.items():
+        fmt = fmt.replace(java_token, py_token)
+    return fmt

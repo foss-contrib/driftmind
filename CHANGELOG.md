@@ -16,6 +16,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2026-02-01
+
+### Added
+- GitHub Actions CI/CD pipeline for automated testing and linting
+
+### Changed
+- **BREAKING**: Minimum Python version raised from 3.8 to 3.9
+- Improved documentation structure and consistency
+- Updated pre-commit config to exclude untracked files
+
+### Fixed
+- Minor corrections in documentation
+
+### Removed
+- Unused notebook files and obsolete code
+
+## [0.4.0] - 2026-01-31
+
+### Added
+- Comprehensive test suite: 65 tests with 85% coverage
+- Complete API documentation in `docs/API.md`
+- Utils package refactoring (`utils/helpers.py`, `utils/generator.py`)
+- Quickstart example (`examples/quickstart.py`)
+- Testing documentation (`tests/TESTING.md`)
+- Environment template (`.env.example`)
+- Pre-commit hooks with ruff for code quality
+
+### Changed
+- Enhanced error handling with retry logic and exponential backoff
+- Connection pooling for better performance
+- Sensitive data protection in logs
+- Bulk operations with partial success handling
+- Pydantic v2 models with automatic snake_case ↔ camelCase conversion
+- Improved README
+
+### Fixed
+- Bulk operations field handling (`results` vs `details`)
+- Import paths after utils refactoring
+- Notebook imports to use public API
+
 ## [0.3.0] - 2026-02-01
 
 ### Changed
