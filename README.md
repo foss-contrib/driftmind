@@ -85,7 +85,8 @@ uv sync
 **For development (editable mode with all tools):**
 
 ```bash
-uv sync --all-extras
+# For development (includes testing tools, linter, and examples):
+uv sync --dev --extra examples
 ```
 
 ---
@@ -143,10 +144,10 @@ The DriftMind client includes a comprehensive test suite with **65 tests** achie
 
 ```bash
 # Run all tests using uv
-uv run pytest tests/
+uv run python -m pytest tests/
 
 # Run with coverage report
-uv run pytest tests/ --cov=driftmind --cov-report=term-missing
+uv run python -m pytest tests/ --cov=driftmind --cov-report=term-missing
 ```
 
 See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation.

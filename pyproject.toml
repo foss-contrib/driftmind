@@ -36,7 +36,7 @@ dependencies = [
     "pydantic>=2.10.6",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -44,11 +44,13 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.0.0",
 ]
+
+[project.optional-dependencies]
 examples = [
     "jupyterlab>=4.3.8",
 ]
 all = [
-    "driftmind[dev,examples]"
+    "driftmind[examples]"
 ]
 
 [project.urls]
