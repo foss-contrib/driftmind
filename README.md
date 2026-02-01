@@ -133,7 +133,19 @@ DRIFTMIND_API_URL=[https://api.thingbook.io/access/api/driftmind](https://api.th
 
 ## 🧪 Development & Testing
 
-### Testing
+### 🛠️ Environment Setup
+
+To ensure all development tools and hooks are correctly configured, run the following:
+
+```bash
+# 1. Sync the environment (installs dev tools and optional examples)
+uv sync --dev --extra examples
+
+# 2. Install the git pre-commit hooks
+uv run pre-commit install
+```
+
+### 🧪 Testing
 
 The DriftMind client includes a comprehensive test suite with **65 tests** achieving **85% code coverage**:
 
@@ -143,7 +155,7 @@ The DriftMind client includes a comprehensive test suite with **65 tests** achie
 - **Utils & plotting** (15 tests) - Credential loading, date conversion, plotting functions
 
 ```bash
-# Run all tests using uv
+# Run all tests using uv (recommended for src layout)
 uv run python -m pytest tests/
 
 # Run with coverage report
@@ -152,17 +164,14 @@ uv run python -m pytest tests/ --cov=driftmind --cov-report=term-missing
 
 See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation.
 
-### Pre-commit Hooks
+### ✨ Code Quality (Pre-commit)
 
-This project uses [pre-commit](https://pre-commit.com/) with [ruff](https://docs.astral.sh/ruff/) for automated code quality checks:
+This project uses [pre-commit](https://pre-commit.com/) with [ruff](https://docs.astral.sh/ruff/) to automate code quality. Hooks run automatically before each commit; if issues are found, the commit is blocked until fixed.
 
-**Setup:**
+**Manual execution:**
 
 ```bash
-# Install git hooks
-uv run pre-commit install
-
-# Run manually on all files
+# Run hooks manually on all files
 uv run pre-commit run --all-files
 ```
 
@@ -174,13 +183,11 @@ uv run pre-commit run --all-files
   - `I`: Import sorting (isort-compatible)
   - `B`: Bugbear (common bugs and design problems)
   - `UP`: pyupgrade (modern Python syntax)
-- **ruff format**: Consistent code formatting (Black-compatible)
+- **ruff format**: Ensures consistent code formatting (Black-compatible)
 
-The hooks run automatically before each commit. If issues are found, the commit is blocked until fixed.
+### 🚀 Continuous Integration (CI)
 
-### Continuous Integration (CI)
-
-All pull requests are automatically tested via **GitHub Actions** on both **Windows and Ubuntu** to ensure cross-platform compatibility.
+All pushes and pull requests are automatically tested via **GitHub Actions** on both **Windows and Ubuntu** to ensure cross-platform compatibility and maintain code integrity.
 
 ---
 
