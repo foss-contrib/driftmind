@@ -12,9 +12,6 @@ DriftMind is particularly well-suited for:
 - ⚡ **Cold-start forecasting**: predictions available immediately without long historical training.
 - 🔍 **On-the-fly anomaly detection** using dynamic clustering.
 - 📈 **Scalable deployments** where thousands of forecasters can be created, queried, and updated in real time.
-
----
-
 ## 🔬 Core Concepts
 
 At its core, DriftMind blends:
@@ -22,6 +19,17 @@ At its core, DriftMind blends:
 - **Online clustering** to adapt quickly to new patterns.
 - **Geometric forecasting** as a fallback when no cluster is available.
 - **Continuous learning** without explicit retraining steps.
+
+## 📚 Research & Publications
+
+DriftMind is built on novel research in adaptive signal processing and online clustering. For a deeper dive into the architecture and theoretical foundations, please refer to:
+
+* **📄 The Paper:** [DriftMind: A Self-Adaptive, Cold-Start Framework for Time Series Forecasting and Anomaly Detection](https://www.researchgate.net/publication/398142288_DriftMind_A_Self-Adaptive_Cold-Start_Framework_for_Time_Series_Forecasting_and_Anomaly_Detection_in_Fast_Data_Streams) – *ResearchGate (Preprint), Dec 2025*
+* **🧠 The Article:** [Reflexive Memory: A CPU-Only Alternative to Transformers for Streaming Forecasting](https://medium.com/towards-artificial-intelligence/reflexive-memory-a-cpu-only-alternative-to-transformers-for-streaming-forecasting-45efc12e383c) – *Towards AI, Dec 2025*
+
+These resources detail the **single-pass clustering mechanism** and **temporal transition graphs** that allow DriftMind to outperform deep learning models (like OneNet) in real-time environments without GPUs.
+
+---
 
 ## 🎯 The DriftMind Client
 
@@ -45,44 +53,65 @@ The **DriftMind Client** is a lightweight Python package that encapsulates the [
 - 📊 Pydantic v2 models with automatic validation.
 - 🧪 85% test coverage with 65 tests.
 
-## 🛠 Prerequisites
+---
 
-Before using the DriftMind Client, make sure you have the following:
+## 🛠 Prerequisites & Installation
 
-- **Python environment**: The DriftMind Client requires Python 3.9 or higher.
+### 1. System Requirements
+- **Python**: 3.9 or higher.
+- **Windows Users**: You must have the **Visual Studio Build Tools** installed to compile dependencies like `numpy`. 
+    - [Download here](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select the **"Desktop development with C++"** workload.
 
-- **DriftMind backend service**: The client communicates with the **DriftMind API service**. You will need either:
-  - Access to a **Thingbook.io hosted DriftMind endpoint**, or
-  - A **local deployment** of the DriftMind backend (Kubernetes) for on-premise environments.
-
-- **API credentials**: 
+### 2. Backend Access
+You will need:
   - An **API key**: Register at <https://thingbook.io/> and choose the free Demo tier to obtain a key.
   - **Base URL**: The DriftMind API endpoint (e.g., `https://api.thingbook.io/access/api/driftmind`).
 
-  Pass these as environment variables (or via a `.env` file): `DRIFTMIND_API_KEY` and `DRIFTMIND_API_URL`.
+These should be stored in a `.env` file (see [Configuration](#-configuration)).
 
-## 🚀 Installation
+### 3. Quick Start Installation
 
-While `uv` is recommended, standard `pip` commands also work.
+We recommend using [uv](https://docs.astral.sh/uv/) for the fastest and most reliable setup. It automatically handles the virtual environment and lockfile synchronization.
 
 ```bash
 # Clone the repository
 git clone https://github.com/thngbk/driftmind.git
 cd driftmind
 
-# Create and activate virtual environment
-uv venv
-source .venv/bin/activate
-
-# Install package
-uv pip install .
+# Synchronize the environment (creates .venv and installs everything)
+uv sync
 ```
 
-**For development:**
+**For development (editable mode with all tools):**
+
 ```bash
-# Install in editable mode with dev dependencies
-uv pip install -e ".[dev]"
+uv sync --all-extras
 ```
+
+---
+
+## ⚠️ Migration from 0.2.x (Breaking Changes)
+
+Version **0.4.1** introduces a major change to provide a more idiomatic Python experience: **API response keys are now automatically converted from `camelCase` to `snake_case`.**
+
+| Old Behavior (v0.2.0)         | New Behavior (v0.4.1)          |
+| ----------------------------- | ------------------------------ |
+| `result["anomalyScore"]`      | `result["anomaly_score"]`      |
+| `result["forecastingMethod"]` | `result["forecasting_method"]` |
+
+### How to use the Legacy Version
+
+If your existing codebase depends on the `camelCase` keys and you are not ready to upgrade, you can install the legacy version using the `v0.2.0` tag:
+
+```bash
+# Using uv
+uv pip install git+[https://github.com/thngbk/driftmind.git@v0.2.0](https://github.com/thngbk/driftmind.git@v0.2.0)
+
+# Using pip
+pip install git+[https://github.com/thngbk/driftmind.git@v0.2.0](https://github.com/thngbk/driftmind.git@v0.2.0)
+```
+
+---
 
 ## ⚙️ Configuration
 
@@ -92,14 +121,16 @@ Copy the example environment file and add your credentials:
 cp .env.example .env
 ```
 
-Then edit `.env` with your credentials:
+Edit `.env` with your credentials:
 
-```
+```text
 DRIFTMIND_API_KEY=<your_api_key>
-DRIFTMIND_API_URL=https://api.thingbook.io/access/api/driftmind
+DRIFTMIND_API_URL=[https://api.thingbook.io/access/api/driftmind](https://api.thingbook.io/access/api/driftmind)
 ```
 
-## 🧪 Development Setup
+---
+
+## 🧪 Development & Testing
 
 ### Testing
 
@@ -111,10 +142,10 @@ The DriftMind client includes a comprehensive test suite with **65 tests** achie
 - **Utils & plotting** (15 tests) - Credential loading, date conversion, plotting functions
 
 ```bash
-# Run all tests
+# Run all tests using uv
 uv run pytest tests/
 
-# Run with coverage
+# Run with coverage report
 uv run pytest tests/ --cov=driftmind --cov-report=term-missing
 ```
 
@@ -127,10 +158,7 @@ This project uses [pre-commit](https://pre-commit.com/) with [ruff](https://docs
 **Setup:**
 
 ```bash
-# Install dev dependencies (includes pre-commit)
-uv pip install -e ".[dev]"
-
-# Install git hooks (runs automatically on every commit)
+# Install git hooks
 uv run pre-commit install
 
 # Run manually on all files
@@ -149,12 +177,9 @@ uv run pre-commit run --all-files
 
 The hooks run automatically before each commit. If issues are found, the commit is blocked until fixed.
 
-### Continuous Integration
+### Continuous Integration (CI)
 
-All pull requests are automatically tested via GitHub Actions. The workflow runs:
-- Full test suite with coverage reporting
-- Code linting with ruff
-- Format checking
+All pull requests are automatically tested via **GitHub Actions** on both **Windows and Ubuntu** to ensure cross-platform compatibility.
 
 ---
 
@@ -166,7 +191,7 @@ All API responses are automatically validated using Pydantic v2 models, ensuring
 
 ### 1. Import and Initialize
 
-The client handles authentication and session management automatically. Use the context manager to ensure proper cleanup of resources.
+The client handles authentication and session management automatically. Use the context manager for automatic resource cleanup.
 
 ```python
 from driftmind import DriftMindClient
@@ -568,11 +593,21 @@ jupyter lab examples/cold_start_demo.ipynb
 
 ## ⚠️ Common Errors
 
-> **📘 For complete error handling guide, see [docs/API.md#error-handling](docs/API.md#error-handling)**
+> **📘 For complete error handling guide, see [docs/API.md#error-handling**](https://www.google.com/search?q=docs/API.md%23error-handling)
 
-### Verifying API Connectivity
+### 🪟 Windows: C++ Build Tools Missing
 
-Before performing operations, you can verify that the API is reachable and your credentials are valid:
+If you see an error like `error: Microsoft Visual C++ 14.0 or greater is required` during installation, it means the `numpy` build failed because your system lacks a C++ compiler.
+
+**The Fix:**
+
+1. Download the [Visual Studio Build Tools](https://www.google.com/search?q=https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+2. Run the installer and select **"Desktop development with C++"**.
+3. Restart your terminal and run `uv sync` again.
+
+### 🔍 Verifying API Connectivity
+
+Before performing complex operations, use `health_check()` to verify connectivity and credentials:
 
 ```python
 with DriftMindClient(
@@ -591,15 +626,14 @@ with DriftMindClient(
         print(f"❌ Network error: {e}")
 ```
 
-### Empty or Invalid forecaster_id
+### 🆔 Empty or Invalid forecaster_id
 
-All methods that accept a `forecaster_id` parameter validate that it's not empty or whitespace:
+The client validates `forecaster_id` locally to save unnecessary API calls. It must not be empty or whitespace.
 
 ```python
 # ❌ These will raise DriftMindError
 client.forecast("")           # Empty string
 client.forecast("   ")        # Whitespace only
-client.delete_forecaster("")  # Empty string
 
 # ✅ Valid usage
 forecaster_id = forecaster_info.get("forecaster_id")

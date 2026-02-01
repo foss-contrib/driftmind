@@ -8,7 +8,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 from dateutil import parser as date_parser
 
-from ..exceptions import DriftMindConfigError
+from driftmind.exceptions import DriftMindConfigError
 
 try:
     from dotenv import load_dotenv

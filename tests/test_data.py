@@ -75,9 +75,9 @@ class TestForecasterCreationSchema:
         # We normalize to lowercase and remove underscores to be safe
         normalized_field = missing_field.replace("_", "").lower()
 
-        assert any(
-            normalized_field in loc.replace("_", "") for loc in flat_locs
-        ), f"Expected error for field '{missing_field}', but got locs: {flat_locs}"
+        assert any(normalized_field in loc.replace("_", "") for loc in flat_locs), (
+            f"Expected error for field '{missing_field}', but got locs: {flat_locs}"
+        )
 
     # 4. API Error Handling (parsing the 400/500 JSON)
     def test_response_error_handling_schema(self, api_validation_error):

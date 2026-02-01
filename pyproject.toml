@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "driftmind"
-version = "0.3.1"
+version = "0.4.1"
 description = "Python client and demo utilities for DriftMind forecasting API"
 authors = [
     { name = "Thingbook.io", email = "roman.f@thingbook.io" }
@@ -48,25 +48,27 @@ examples = [
     "jupyterlab>=4.3.8",
 ]
 all = [
-    "driftmind[dev]",
-    "driftmind[examples]"
+    "driftmind[dev,examples]"
 ]
+
 [project.urls]
 Repository = "https://github.com/thngbk/driftmind"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/driftmind"]
 
 [tool.ruff]
 line-length = 88
 target-version = "py39"
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "B", "UP"]
+# Added 'PYI' for type-hinting checks and 'TID' for tidier imports
+select = ["E", "W", "F", "I", "B", "UP", "PYI", "TID"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["driftmind"]
+combine-as-imports = true
 
 [tool.ruff.format]
 quote-style = "double"
@@ -75,10 +77,21 @@ indent-style = "space"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
+[tool.ruff.lint.flake8-tidy-imports]
+# Disallow all relative imports from parent modules
+ban-relative-imports = "parents"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "--strict-markers"
 markers = [
     "integration: marks tests as integration tests (run against real API)",
+]
+
+[tool.uv]
+# Ensures your lockfile stays consistent across your Windows and Ubuntu machines
+environments = [
+    "sys_platform == 'win32'",
+    "sys_platform == 'linux'",
 ]

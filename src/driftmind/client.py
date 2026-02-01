@@ -9,8 +9,9 @@ import requests
 from pydantic import ValidationError
 from requests import Response, Session
 from requests.adapters import HTTPAdapter
+from typing_extensions import Self
 
-from .constants import (
+from driftmind.constants import (
     BULK_OPERATION_TIMEOUT,
     DEFAULT_MAX_RETRIES,
     DEFAULT_POOL_CONNECTIONS,
@@ -33,7 +34,7 @@ from .constants import (
     SENSITIVE_HEADERS,
     USER_AGENT,
 )
-from .exceptions import (
+from driftmind.exceptions import (
     DataFeedError,
     DriftMindApiError,
     DriftMindError,
@@ -43,7 +44,7 @@ from .exceptions import (
     GetForecasterDetailsError,
     ListObjectsError,
 )
-from .models import (
+from driftmind.models import (
     ApiErrorResponse,
     BulkDataFeedPayload,
     BulkOperationResponse,
@@ -742,7 +743,7 @@ class DriftMindClient:
         if self._owns_session:
             self._session.close()
 
-    def __enter__(self) -> DriftMindClient:
+    def __enter__(self) -> Self:
         """Context manager entry."""
         return self
 

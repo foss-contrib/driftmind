@@ -20,14 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - GitHub Actions CI/CD pipeline for automated testing and linting
+- Universal resolution support in `uv.lock` for seamless cross-OS syncing (Windows/Linux)
 
 ### Changed
 - **BREAKING**: Minimum Python version raised from 3.8 to 3.9
+- Migrated build backend from `setuptools` to `hatchling` for better `uv` integration
 - Improved documentation structure and consistency
 - Updated pre-commit config to exclude untracked files
+- Refined Ruff linting rules to include `PYI` and `TID` for better type-hinting and import management
 
 ### Fixed
 - Minor corrections in documentation
+- Fixed self-referencing `all` extra in `pyproject.toml`
 
 ### Removed
 - Unused notebook files and obsolete code
@@ -54,9 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Bulk operations field handling (`results` vs `details`)
 - Import paths after utils refactoring
-- Notebook imports to use public API
-
-## [0.3.0] - 2026-02-01
+- Notebook imports to use public API## [0.3.0] - 2026-02-01
 
 ### Changed
 - Implemented snake_case to camelCase translation for all client inputs and outputs.
