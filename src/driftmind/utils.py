@@ -4,38 +4,62 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Sequence
-from dotenv import dotenv_values
 
 import matplotlib.pyplot as plt
 
 from .exceptions import DriftMindConfigError
 
-def load_credentials(file_path_str: str) -> dict:
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+
+def load_credentials(
+    *,
+    use_dotenv: bool = True,
+    dotenv_path: Path | None = None,
+) -> dict[str, str]:
+    """Load DriftMind API credentials from env/.env.
+
+    Args:
+        use_dotenv: Whether to attempt loading variables from a ``.env`` file.
+        dotenv_path: Optional explicit path to the ``.env`` file.
+
+    Returns:
+        A dict with ``DRIFTMIND_API_KEY`` and ``DRIFTMIND_API_URL``.
+
+    Raises:
+        DriftMindConfigError: If required variables are missing, or dotenv
+            is requested but unavailable.
     """
-    Reads credentials strictly from the specified file.
-    """
-    path = Path(file_path_str)
-    
-    # 1. C++ Style: Verify existence first
-    if not path.exists():
-        raise FileNotFoundError(f"CRITICAL: Could not find file at: {path.resolve()}")
+    if use_dotenv:
+        if load_dotenv is None:
+            raise DriftMindConfigError(
+                "python-dotenv is not installed but use_dotenv=True. "
+                "Install it with `pip install python-dotenv` or set "
+                "DRIFTMIND_API_KEY and DRIFTMIND_API_URL in the environment."
+            )
 
-    # 2. Pure IO: Read file content into a local dictionary
-    # dotenv_values() parses the file but DOES NOT add to os.environ
-    config = dotenv_values(path)
+        if dotenv_path is not None:
+            load_dotenv(dotenv_path)
+        else:
+            load_dotenv()
 
-    # 3. Retrieve values
-    api_key = config.get("DRIFTMIND_API_KEY")
-    base_url = config.get("DRIFTMIND_API_URL")
+    api_key = os.getenv("DRIFTMIND_API_KEY")
+    base_url = os.getenv("DRIFTMIND_API_URL")
 
-    # 4. Validate
     if not api_key or not base_url:
-        raise ValueError(f"File found, but keys are missing. Content read: {config}")
+        raise DriftMindConfigError(
+            "Missing DRIFTMIND_API_KEY or DRIFTMIND_API_URL environment variables. "
+            "Set them in your environment or in a .env file."
+        )
 
     return {
         "DRIFTMIND_API_KEY": api_key,
         "DRIFTMIND_API_URL": base_url,
     }
+
 
 def plot_actual_vs_predicted(
     df,
@@ -107,7 +131,7 @@ def plot_time_series(
         None. The function creates and shows a matplotlib figure.
 
     """
-    if len(timestamps) == 0 or len(values) == 0:
+    if not timestamps or not values:
         return
 
     plt.figure(figsize=(15, 3))
