@@ -82,7 +82,7 @@ uv pip install -e .
 
 ## ⚙️ Configuration
 
-Create a file named .env (e.g., in your project root or env/ folder) to store your credentials securely.
+Create a file named `.env` (e.g., in your project root or `env/` folder) to store your credentials securely.
 
 ### File Content:
 ```
@@ -98,17 +98,13 @@ DRIFTMIND_API_URL=https://api.thingbook.io/access/api/driftmind/v1/
 from driftmind import DriftMindClient
 from driftmind.utils import load_credentials
 
-# Load credentials from your local file
-# Ensure you point to the correct location of your .env file
-creds = load_credentials(".env") 
-
+creds = load_credentials()
 client = DriftMindClient(
     api_key=creds["DRIFTMIND_API_KEY"], 
     base_url=creds["DRIFTMIND_API_URL"]
 )
 
 ```
----
 
 ### 2. Create a Forecaster
 
@@ -127,20 +123,15 @@ Example:
 
 ```python
 columns = ["sin", "cos", "tan"]
-
 forecaster_payload = {
-    "forecasterName": "Cold Start Demo",
+    "forecaster_name": "Cold Start Demo",
     "features": columns,
-    "inputSize": 15,
-    "outputSize": 1,
-    "maxClustersAllowed": 100,
-    "timeStampIntervalInSeconds": 30,
+    "input_size": 15,
+    "output_size": 1,
 }
 
 forecaster_info = client.create_forecaster(forecaster_payload)
-forecaster_id = forecaster_info.get("forecasterId")
-
-
+forecaster_id = forecaster_info.get("forecaster_id")
 ```
 
 If only these parameters are provided, DriftMind applies sensible defaults for the rest.
@@ -153,43 +144,39 @@ You can fine-tune behavior by overriding the default parameters.
 
 ```python
 forecaster_info = client.create_forecaster({
-  "forecasterName": "Machine Health Forecaster",
-  "features": [
-    "vibration_g",
-    "motor_temp_c",
-    "power_kw"
-  ],
-  "inputSize": 30,
-  "outputSize": 1,
-  "maxClustersAllowed": 50,
-  "similarityThreshold": 0.8,
-  "timeStampIntervalInSeconds": 30,initializationDate
-  "fitRate": 1,
-  "useCustomDateFormat": true,
-  "dateFormat": "dd-MM-yyyy HH:mm",
-  "useInitializationDate": true,
-  "initializationDate": "01-01-2025 00:00"
+  "forecaster_name": "Machine Health Forecaster",
+  "features": ["vibration_g", "motor_temp_c", "power_kw"],
+  "input_size": 30,
+  "output_size": 1,
+  "max_clusters_allowed": 50,
+  "similarity_threshold": 0.8,
+  "timestamp_interval_in_seconds": 30,
+  "fit_rate": 1,
+  "use_custom_date_format": True,
+  "date_format": "%d-%m-%Y %H:%M",
+  "use_initialization_date": True,
+  "initialization_date": "01-01-2025 00:00"
 })
 
-forecaster_id = forecaster_info.get("forecasterId")
+forecaster_id = forecaster_info.get("forecaster_id")
 ```
 
 #### 📋 Parameter Reference
 
 | Parameter                       | Type   | Required | Default                            | Description                                                                     |
 |---------------------------------|--------|----------|------------------------------------|---------------------------------------------------------------------------------|
-| `forecasterName`               | string | ✅ Yes   | –                                  | Human-readable name for the forecaster.                                         |
+| `forecaster_name`               | string | ✅ Yes   | –                                  | Human-readable name for the forecaster.                                         |
 | `features`                      | list   | ✅ Yes   | –                                  | List of feature names (columns in your dataset).                                |
-| `inputSize`                    | int    | ✅ Yes   | –                                  | Number of past points used as input.                                            |
-| `outputSize`                   | int    | ✅ Yes   | –                                  | Number of future points to forecast.                                            |
-| `maxClustersAllowed`          | int    | No       | 200                                | Maximum number of clusters maintained.                                          |
-| `similarityThreshold`          | float  | No       | 0.8                                | Similarity threshold (0–1) for assigning points to clusters.                    |
-| `timeStampIntervalInSeconds` | int    | No       | 60                                 | Expected interval between points expressed in seconds.                          |
-| `fitRate`                      | int    | No       | 1                                  | Frequency of model updates (lower = faster adaptation).                         |
-| `useCustomDateFormat`        | bool   | No       | False                              | Whether to parse timestamps with a custom format.                               |
-| `dateFormat`                   | string | No       | `%d-%m-%Y %H:%M:%S`                | Python strptime/strftime format when `useCustomDateFormat` is set to `True`. |
-| `useInitializationDate`       | bool   | No       | False                              | Whether to align forecasts relative to a given start date.                      |
-| `initializationDate`           | string | No       | System time at forecaster creation | Explicit start date. Otherwise, current time is assigned as start date.         |
+| `input_size`                    | int    | ✅ Yes   | –                                  | Number of past points used as input.                                            |
+| `output_size`                   | int    | ✅ Yes   | –                                  | Number of future points to forecast.                                            |
+| `max_clusters_allowed`          | int    | No       | 200                                | Maximum number of clusters maintained.                                          |
+| `similarity_threshold`          | float  | No       | 0.8                                | Similarity threshold (0–1) for assigning points to clusters.                    |
+| `timestamp_interval_in_seconds` | int    | No       | 60                                 | Expected interval between points expressed in seconds.                          |
+| `fit_rate`                      | int    | No       | 1                                  | Frequency of model updates (lower = faster adaptation).                         |
+| `use_custom_date_format`        | bool   | No       | False                              | Whether to parse timestamps with a custom format.                               |
+| `date_format`                   | string | No       | `%d-%m-%Y %H:%M:%S`                | Python strptime/strftime format when `use_custom_date_format` is set to `True`. |
+| `use_initialization_date`       | bool   | No       | False                              | Whether to align forecasts relative to a given start date.                      |
+| `initialization_date`           | string | No       | System time at forecaster creation | Explicit start date. Otherwise, current time is assigned as start date.         |
 
 With this flexibility, you can start with **minimal setup for quick prototyping**, and later move to **fine-grained configurations** for production scenarios like industrial IoT, telecom, or financial forecasting.
 
@@ -217,7 +204,7 @@ data_batch = {
 client.feed_data(forecaster_id, data_batch)
 ```
 
-Data points are processed in the order they are fed. The first point is assigned the `initializationDate`, while subsequent points are automatically assigned timestamps based on their order and the `timeStampIntervalInSeconds` parameter.
+Data points are processed in the order they are fed. The first point is assigned the `initialization_date`, while subsequent points are automatically assigned timestamps based on their order and the `timestamp_interval_in_seconds` parameter.
 
 ---
 
@@ -245,7 +232,7 @@ result = client.forecast(forecaster_id)
 
 # Visualize results
 for var in columns:
-    df_var = pd.DataFrame(results["features"][var])
+    df_var = pd.DataFrame(results["features_map"][var])
     utils.plot_actual_vs_predicted(df_var, var)
 ```
 ![Actual vs. Predicted](images/image.png)
@@ -258,65 +245,64 @@ A successful forecast request returns a JSON object with both global metrics and
 
 ```json
 {
-  "anomalyScore": 0.03,
-  "numberOfClusters": 41,
-  "features": {
+  "anomaly_score": 0.03,
+  "number_of_clusters": 24,
+  "features_map": {
     "tan": {
-      "timestamps": ["07-01-2026 12:58:42"],
-      "predictions": [1.2363],
-      "upperConfidence": [1.8545],
-      "lowerConfidence": [0.6182],
-      "anomalyScore": 0.02,
-      "forecastingMethod": "Clustering",
-      "numberOfClusters": 10
+      "timestamps": ["23-09-2025 01:33:37"],
+      "predictions": [-0.3633],
+      "upper_confidence": [-0.1078],
+      "lower_confidence": [-1.8216],
+      "anomaly_score": 0,
+      "forecasting_method": "Clustering",
+      "number_of_clusters": 8
     },
     "cos": {
-      "timestamps": ["07-01-2026 12:58:42"],
-      "predictions": [1.1448],
-      "upperConfidence": [1.7172],
-      "lowerConfidence": [0.5724],
-      "anomalyScore": 0.03,
-      "forecastingMethod": "Clustering",
-      "numberOfClusters": 19
+      "timestamps": ["23-09-2025 01:33:37"],
+      "predictions": [1.5515],
+      "upper_confidence": [1.7922],
+      "lower_confidence": [1.3251],
+      "anomaly_score": 0.07,
+      "forecasting_method": "Clustering",
+      "number_of_clusters": 8
     },
     "sin": {
-      "timestamps": ["07-01-2026 12:58:42"],
-      "predictions": [1.7772],
-      "upperConfidence": [2.6658],
-      "lowerConfidence": [0.8886],
-      "anomalyScore": 0.037,
-      "forecastingMethod": "Clustering",
-      "numberOfClusters": 12
+      "timestamps": ["23-09-2025 01:33:37"],
+      "predictions": [-0.0016],
+      "upper_confidence": [0.2502],
+      "lower_confidence": [-0.2372],
+      "anomaly_score": 0.01,
+      "forecasting_method": "Clustering",
+      "number_of_clusters": 8
     }
   }
 }
-
 ```
 
 #### 🔑 Field Descriptions
 
-* **`anomalyScore` (float)**: Global anomaly score across all features.
-* **`numberOfClusters` (int)**: Total number of clusters currently maintained by the system.
-* **`features` (object)**: Per-feature forecast results. Each feature (e.g. `sin`, `cos`, `tan`) contains:
+* **`anomaly_score` (float)**: Global anomaly score across all features.
+* **`number_of_clusters` (int)**: Total number of clusters currently maintained by the system.
+* **`features_map` (object)**: Per-feature forecast results. Each feature (e.g. `sin`, `cos`, `tan`) contains:
   * **`timestamps` (list\[str])**: Timestamps of forecasted points.
   * **`predictions` (list\[float])**: Forecasted values.
-  * **`upperConfidence` / `lowerConfidence` (list\[float])**: Confidence interval bounds.
-  * **`anomalyScore` (float)**: Anomaly score specific to this feature.
-  * **`forecastingMethod` (str)**: Forecasting approach used (e.g. `Clustering`, `Extension`, `Naive`).
-  * **`numberOfClusters` (int)**: Number of clusters active in the system for this Forecaster. the clusters model the recent and past behaviour with minimum footprint.
+  * **`upper_confidence` / `lower_confidence` (list\[float])**: Confidence interval bounds.
+  * **`anomaly_score` (float)**: Anomaly score specific to this feature.
+  * **`forecasting_method` (str)**: Forecasting approach used (e.g. `Clustering`, `Extension`, `Naive`).
+  * **`number_of_clusters` (int)**: Number of clusters active in the system for this Forecaster. the clusters model the recent and past behaviour with minimum footprint.
 
 #### 🔍 Example: Working with Forecasts
 
 ```python
 # Access global anomaly score
-print(f"Global anomaly score: {result['anomalyScore']}")
+print(f"Global anomaly score: {result['anomaly_score']}")
 
 # Iterate over feature forecasts
 for feature, details in result["allResults"].items():
     print(f"\nFeature: {feature}")
     print(f"Predicted: {details['predictions'][0]}")
-    print(f"Confidence interval: ({details['lowerConfidence'][0]}, {details['upperConfidence'][0]})")
-    print(f"Feature anomaly score: {details['anomalyScore']}")
+    print(f"Confidence interval: ({details['lower_confidence'][0]}, {details['upper_confidence'][0]})")
+    print(f"Feature anomaly score: {details['anomaly_score']}")
 ```
 
 ---
@@ -420,57 +406,29 @@ forecaster_id = "529cd364-67b2-4f04-8c07-c42b5740b3aa"
 details = client.get_forecaster_details(forecaster_id)
 
 if details:
-    print(f"Forecaster Name: {details['forecasterName']}")
+    print(f"Forecaster Name: {details['forecaster_name']}")
     print(f"Features: {details['features']}")
-    print(f"Input Size: {details['configuration']['inputSize']}")
-    print(f"Output Size: {details['configuration']['outputSize']}")
+    print(f"Input Size: {details['properities']['input_size']}")
+    print(f"Output Size: {details['properities']['output_size']}")
 ```
 
 Example response:
 
 ```json
 {
-  "features": {
-    "tan": {
-      "anomalyScore": 0.007,
-      "activeClusters": 8,
-      "totalCreatedClusters": 8,
-      "totalDeletedClusters": 0,
-      "totalObservations": 600,
-      "totalTimeSeriesProcessed": 292,
-      "lastAddtion": "08-01-2026 19:45:46"
-    },
-    "sin": {
-      "anomalyScore": 0.013,
-      "activeClusters": 8,
-      "totalCreatedClusters": 8,
-      "totalDeletedClusters": 0,
-      "totalObservations": 600,
-      "totalTimeSeriesProcessed": 292,
-      "lastAddtion": "08-01-2026 19:45:46"
-    },
-    "cos": {
-      "anomalyScore": 0.004,
-      "activeClusters": 9,
-      "totalCreatedClusters": 9,
-      "totalDeletedClusters": 0,
-      "totalObservations": 600,
-      "totalTimeSeriesProcessed": 292,
-      "lastAddtion": "08-01-2026 19:45:46"
-    }
-  },
-  "configuration": {
-    "fitRate": "1",
-    "initializationDate": "08-01-2026 14:46:16",
-    "maxClustersAllowed": "100",
-    "dateFormat": "dd-MM-yyyy HH:mm:ss",
-    "similarityThreshold": "0.8",
-    "timeStampIntervalInSeconds": "30",
-    "outputSize": "1",
-    "inputSize": "15"
-  },
-  "forecasterId": "8e9b66ba-5ec0-41c5-901f-d7ccc2ed2c4e",
-  "forecasterName": "Cold Start Demo"
+  "forecaster_id": "529cd364-67b2-4f04-8c07-c42b5740b3aa",
+  "forecaster_name": "Cold Start Demo",
+  "features": ["tan", "sin", "cos"],
+  "properties": {
+    "fit_rate": "1",
+    "initialization_date": "23-09-2025 09:37:13",
+    "max_clusters_allowed": "100",
+    "date_format": "dd-MM-yyyy HH:mm:ss",
+    "similarity_threshold": "0.8",
+    "timestamp_interval_in_seconds": "60",
+    "output_size": "1",
+    "input_size": "15"
+  }
 }
 ```
 

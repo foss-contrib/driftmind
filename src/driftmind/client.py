@@ -1,7 +1,6 @@
-import logging
-logger = logging.getLogger("Driftmind API Client")
 from __future__ import annotations
 
+import logging
 from http import HTTPStatus
 from typing import Any
 
@@ -25,6 +24,8 @@ from .models import (
     ObjectInformationList,
     TimeSeriesSegment,
 )
+
+logger = logging.getLogger("Driftmind API Client")
 
 
 class DriftMindClient:
@@ -92,13 +93,9 @@ class DriftMindClient:
             DriftMindError: If the request fails due to a network error or a non-success HTTP status code.
 
         """
-        if path:
-            url = f"{self.base_url}/{path.lstrip('/')}"
-        else:
-            url = self.base_url
-        
+        url = f"{self.base_url}{path}"
         logger.debug(f"Requesting: {method} {url}")
- 
+
         try:
             resp = self._session.request(
                 method=method,
@@ -152,50 +149,58 @@ class DriftMindClient:
     def create_forecaster(
         self, payload: ForecasterConfig | dict[str, Any]
     ) -> dict[str, Any]:
-        """Create a new forecaster on the DriftMind API."""
-        
+        """Create a new forecaster on the DriftMind API.
+
+        Args:
+            payload: Forecaster configuration, either as a ``ForecasterConfig``
+                object or a JSON-serializable dictionary.
+
+        Returns:
+            A dictionary containing at least the key ``"forecaster_id"`` on
+            success.
+
+        Raises:
+            DriftMindError: If validation of the configuration fails or a
+                network-level error occurs.
+            DriftMindApiError: If the API returns a success status but the
+                response body/headers are missing the required identity information.
+            ForecasterCreationError: If the API reports a client error (4xx)
+                or server error (5xx).
+        """
         # 1. Outgoing Validation
         try:
             forecast_config = ForecasterConfig.model_validate(payload)
         except ValidationError as err:
             raise DriftMindError(f"Invalid forecaster configuration: {err}") from err
 
-        # 2. FIXED: Force CamelCase for Java API Compliance
-        # We dump the model to a dict, but we MUST ensure keys match the Java DTOs.
-        # If ForecasterConfig is not aliased correctly, we patch it here manually.
-        raw_dump = forecast_config.model_dump(mode="json", exclude_none=True)
-        
-        api_payload = {
-            "forecasterName": raw_dump.get("forecaster_name") or raw_dump.get("forecasterName"),
-            "features": raw_dump.get("features"),
-            "inputSize": raw_dump.get("input_size") or raw_dump.get("inputSize"),
-            "outputSize": raw_dump.get("output_size") or raw_dump.get("outputSize"),
-            # Map other optional fields similarly
-            "timeStampIntervalInSeconds": raw_dump.get("time_stamp_interval_in_seconds"),
-            "maxClustersAllowed": raw_dump.get("max_clusters_allowed")
-        }
-        
-        # Clean up None values from the manual map
-        api_payload = {k: v for k, v in api_payload.items() if v is not None}
-
-    
-        # 3. FIXED: Correct Endpoint URL
-        # The API documentation specifies POST /driftmind/v1/forecasters
-        resp = self._request("POST", "forecasters", json=api_payload)
-        
-        # ... (Rest of your error handling logic remains valid) ...
+        # 2. Request & Centralized Error Check
+        payload = forecast_config.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
+        print(payload)
+        resp = self._request("POST", "", json=payload)
+        print(resp.text)
+        print(resp.status_code)
 
         # This will raise ForecasterCreationError if status is 4xx/5xx
         data = self._parse_and_check(resp, error_class=ForecasterCreationError)
+        print(data)
 
-        # 4. Identity Extraction & Response Mapping
-        # Java API returns "forecasterId" (camelCase). Python likely expects "forecaster_id".
-        # We handle both to be safe.
+        # 3. Incoming Validation
+        try:
+            forecaster_spec = ForecasterSpec.model_validate(data)
+            validated_data = forecaster_spec.model_dump(
+                mode="json", by_alias=False, exclude_none=True
+            )
+        except ValidationError as err:
+            raise DriftMindApiError(
+                resp.status_code, "Malformed API response", details=err
+            ) from err
+
+        # 4. Identity Extraction
         location = resp.headers.get("Location")
         header_id = location.rstrip("/").split("/")[-1] if location else None
-        
-        returned_id = data.get("forecasterId") or data.get("forecaster_id")
-        final_id = header_id or returned_id
+        final_id = header_id or validated_data.get("forecaster_id")
 
         if not final_id:
             raise DriftMindApiError(
@@ -203,10 +208,9 @@ class DriftMindClient:
             )
 
         # 5. Success State
-        # Ensure we return snake_case to the Python user, even if API gave camelCase
-        data["forecaster_id"] = final_id
-        
-        return data
+        validated_data["forecaster_id"] = final_id
+
+        return validated_data
 
     def feed_point(
         self,
@@ -240,9 +244,12 @@ class DriftMindClient:
         except ValidationError as err:
             raise DriftMindError(f"Invalid data point specification: {err}") from err
 
-        payload = segment.model_dump(mode="json", exclude_none=True)
+        payload = {
+            "forecasterId": forecaster_id,
+            "data": segment.model_dump(mode="json", exclude_none=True),
+        }
 
-        resp = self._request("POST", "forecasters/"+forecaster_id+"/observations", json=payload)
+        resp = self._request("PATCH", "", json=payload)
         data = self._parse_and_check(resp)
         status = resp.status_code
 
@@ -318,18 +325,15 @@ class DriftMindClient:
             ForecastError: If the API reports a 4xx/5xx error (for example,
                 the forecaster does not exist or an authorization error occurs).
         """
-        path = f"/forecasters/{forecaster_id}/predictions"
+        path = f"/forecaster/{forecaster_id}/predict"
         resp = self._request("GET", path)
         data = self._parse_and_check(resp)
         status = resp.status_code
 
         if status == HTTPStatus.OK:
             try:
-                print(f"Data Returned:\n{data}")
                 forecast = ForecastResponse.model_validate(data)
             except ValidationError as err:
-                # Print the ACTUAL validation error so we can see what field is wrong
-                print(f"❌ PYDANTIC VALIDATION ERROR:\n{err}")
                 raise DriftMindApiError(
                     resp.status_code, "Unexpected forecast payload", details=resp.text
                 ) from err
@@ -365,7 +369,7 @@ class DriftMindClient:
                 cannot be parsed as JSON.
 
         """
-        path = f"/forecasters/{forecaster_id}/observations"
+        path = f"/forecaster/{forecaster_id}/data"
         resp = self._request("GET", path)
         data = self._parse_and_check(resp)
 
@@ -401,20 +405,33 @@ class DriftMindClient:
         self, forecaster_id: str, cached: bool = True
     ) -> dict[str, Any]:
         """Fetch configuration details for a specific forecaster.
-        
-        Returns the raw JSON response from the API without local validation.
+
+        Args:
+            forecaster_id: Forecaster identifier.
+            cached: Whether the client must use cached forecaster definitions or
+                retrieve it from the DriftMind service.
+
+        Returns:
+            A dictionary containing the forecaster configuration as
+            returned by the API.
+
+        Raises:
+            DriftMindError: If the request fails or the response body
+                cannot be parsed as JSON.
+
         """
-        # Correct Path based on your OpenAPI spec
-        path = f"forecasters/{forecaster_id}"
-        
-        # 1. Get the raw response
+        path = f"/forecaster/{forecaster_id}/details"
         resp = self._request("GET", path)
-        
-        # 2. Check for HTTP errors (4xx/5xx) and parse JSON
-        # This function already handles raising DriftMindApiError if the status is bad
         data = self._parse_and_check(resp, error_class=GetObjectDetailsError)
 
-        # 3. Return the raw data.
-        # No Pydantic validation here. we pass it through to the user instead of crashing.
-        
-        return data
+        try:
+            object_detail = ForecasterSpec.model_validate(data)
+            validated_data = object_detail.model_dump(
+                mode="json", by_alias=False, exclude_none=True
+            )
+        except ValidationError as err:
+            raise DriftMindApiError(
+                resp.status_code, "Malformed API response", details=err
+            ) from err
+
+        return validated_data

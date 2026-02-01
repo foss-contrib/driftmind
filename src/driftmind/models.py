@@ -391,7 +391,7 @@ class TimeSeriesData(BaseModel):
 
 
 class ForecastResultPerFeature(BaseModel):
-    time_stamps: list[str] = Field(..., alias="timestamps")
+    time_stamps: list[str] = Field(..., alias="timeStamps")
     predictions: list[float]
     upper_confidence: list[float] = Field(..., alias="upperConfidence")
     lower_confidence: list[float] = Field(..., alias="lowerConfidence")
@@ -428,20 +428,18 @@ class ForecastResponse(BaseModel):
 
     anomaly_score: float = Field(..., alias="anomalyScore")
     number_of_clusters: int = Field(..., alias="numberOfClusters")
-    features_map: dict[str, ForecastResultPerFeature] = Field(..., alias="features")
+    features_map: dict[str, ForecastResultPerFeature] = Field(..., alias="FeaturesMap")
 
     @model_validator(mode="after")
     def validate_cross_feature_consistency(self) -> ForecastResponse:
         if not self.features_map:
             return self
 
-        iterator = iter(self.features_map.items())
-        
-        # Grab the first item to establish the baseline length
-        _, first_feature = next(iterator)
+        # Get the length from the first feature in the map
+        iterator = iter(self.features_map.values())
+        first_feature = next(iterator)
         expected_length = len(first_feature.time_stamps)
 
-        # Now iterate the rest
         for name, feature in iterator:
             actual_length = len(feature.time_stamps)
             if actual_length != expected_length:
