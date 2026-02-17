@@ -16,6 +16,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.2] - 2026-02-17
+
+### Added
+- `accept_java_date_format` option on `DriftMindClient` to work with Java SimpleDateFormat patterns directly, bypassing automatic Python↔Java conversion.
+- Bundled OpenAPI spec (`openapi.yaml`) as package resource data for contract testing and spec-driven mocking.
+- Added `jsonschema`, `openapi-core`, and `openapi-spec-validator` as dev dependencies for contract testing.
+
+### Fixed
+- Corrected project keywords in `pyproject.toml`.
+- Fixed broken links and inaccuracies in `README.md`.
+
+### Changed
+- Migrated test mocking from static fixture files to spec-driven examples via `get_openapi_response_example`, ensuring mocked responses always reflect the current OpenAPI spec.
+- Flattened `fixtures/responses/` directory structure (removed `success/` and `errors/` subdirectories).
+
+### Removed
+- Removed 20 unused JSON fixture files superseded by spec-driven mocking.
+- Removed `record_api_responses.py` references from testing documentation.
+
+---
+
 ## [0.4.1] - 2026-02-01
 
 ### Added

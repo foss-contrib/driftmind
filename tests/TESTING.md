@@ -2,221 +2,201 @@
 
 ## Overview
 
-The DriftMind client uses **pytest** with the **responses** library to mock HTTP requests. All tests use recorded fixtures from real API interactions, ensuring tests match actual API behavior.
+The DriftMind client uses **pytest** with the **responses** library to mock HTTP requests. Tests use a combination of JSON request fixtures and examples extracted at runtime from the bundled OpenAPI spec (`src/driftmind/data/openapi.yaml`), ensuring mocked responses always match the contract.
 
 **Test Framework:**
 - **pytest** - Test runner and fixture management
 - **responses** - HTTP mocking library
 - **pytest-cov** - Coverage reporting
+- **jsonschema** / **openapi-core** - Contract validation against the OpenAPI spec
 
 **Test Strategy:**
-1. **Client-side validation** - Pydantic model validation (no mocking)
-2. **API interactions** - Mocked with real API response fixtures
-3. **Error handling** - Both client and API errors
-4. **Retry logic** - Transient failure handling
+1. **Client-side validation** - Pydantic model validation (no mocking needed)
+2. **Spec-driven mocking** - API responses are extracted from OpenAPI examples via `get_openapi_response_example`, not hardcoded
+3. **Contract testing** - Request/response validated against the OpenAPI spec via `validate_contract`
+4. **Error handling** - Both client-side and API errors
+5. **Retry logic** - Transient failure handling
 
 ---
 
-## Test Results
+## Running Tests
 
-✅ **All 65 tests passing** (execution time: ~6.9 seconds)
+```bash
+# All tests (use python -m pytest for src layout)
+uv run python -m pytest tests/
 
+# With coverage
+uv run python -m pytest tests/ --cov=driftmind --cov-report=term-missing
+
+# Verbose output
+uv run python -m pytest tests/ -v
+
+# Specific test file
+uv run python -m pytest tests/test_client.py -v
+
+# Specific test class
+uv run python -m pytest tests/test_client.py::TestCreateForecaster -v
+
+# Specific test
+uv run python -m pytest tests/test_client.py::TestClientValidation::test_rejects_duplicate_features -v
 ```
-============================= test session starts ==============================
-tests/test_client.py (30 tests) PASSED                                   [ 46%]
-tests/test_client_edge_cases.py (10 tests) PASSED                       [ 61%]
-tests/test_data.py (9 tests) PASSED                                      [ 75%]
-tests/test_utils.py (15 tests) PASSED                                    [100%]
-
-============================== 65 passed in 6.90s ===============================
-```
-
-## Test Coverage
-
-| Module          | Coverage | Status                 |
-|-----------------|----------|------------------------|
-| `__init__.py`   | 100%     | ✅ Complete             |
-| `exceptions.py` | 100%     | ✅ Complete             |
-| `utils.py`      | 96%      | ✅ Excellent            |
-| `models.py`     | 94%      | ✅ Excellent            |
-| `constants.py`  | 93%      | ✅ Excellent            |
-| `client.py`     | 82%      | ✅ Excellent            |
-| **Overall**     | **85%**  | ✅ **Production Ready** |
-
-**Conclusion:** Comprehensive test coverage across all critical modules. Client library is production-ready.
 
 ---
 
 ## Test Distribution
 
-### test_client.py (30 tests)
-**Client Validation (7 tests)** - Empty/whitespace forecaster_id, missing fields, invalid constraints, duplicate features, inconsistent data
+### test_client.py (29 tests)
 
-**Success Cases (8 tests)** - Create, feed, forecast, get details, get data (empty/with data), list, delete
+**TestClientValidation (9 tests)** - Client-side validation without API calls:
+- `test_rejects_invalid_forecaster_id` (3 parametrized: empty, whitespace, None)
+- `test_rejects_missing_required_fields`
+- `test_rejects_invalid_window_sizes` (2 parametrized: output > input)
+- `test_rejects_duplicate_features`
+- `test_rejects_inconsistent_data_lengths`
+- `test_rejects_non_numeric_data`
 
-**Error Cases (5 tests)** - Wrong features (400), insufficient data (422), not found (404), empty payload, wrong format, auth error (401)
+**TestCreateForecaster (2 tests)** - Create endpoint with contract validation:
+- `test_create_minimal_success` (201)
+- `test_create_auth_error` (401)
 
-**Bulk Operations (6 tests)** - Bulk feed (200/206/417/REDIS), delete all (success/failures)
+**TestFeedData (4 tests)** - Feed data endpoint:
+- `test_feed_single_point_success` (200)
+- `test_feed_wrong_features_error` (400)
+- `test_feed_empty_payload_error` (client-side)
+- `test_feed_wrong_format_error` (client-side)
 
-**Infrastructure (2 tests)** - Retry logic, context manager
+**TestForecast (2 tests)** - Forecast endpoint:
+- `test_forecast_success` (200)
+- `test_forecast_insufficient_data_error` (422)
 
-### test_client_edge_cases.py (10 tests)
-**Logging Protection (2 tests)** - API key redaction, protection disabled
+**TestGetForecasterDetails (2 tests)** - Details endpoint:
+- `test_get_details_success` (200)
+- `test_get_details_not_found_error` (404)
 
-**Error Handling (8 tests)** - Empty/whitespace API key/URL, trailing slash handling, non-JSON responses, connection errors, custom session, session cleanup
+**TestGetForecasterData (2 tests)** - Observations endpoint:
+- `test_get_data_success` (200)
+- `test_get_data_empty_success` (200, empty data)
 
-### test_data.py (9 tests)
-- Request/response serialization (snake_case ↔ camelCase)
-- Required field validation
-- Cross-field validation
-- Date format conversion
+**TestDeleteForecaster (2 tests)** - Delete endpoint:
+- `test_delete_forecaster_success` (200)
+- `test_delete_forecaster_not_found` (404)
+
+**TestContextManager (2 tests)** - Resource cleanup:
+- `test_context_manager_closes_session_verified`
+- `test_manual_close`
+
+**TestJavaDateFormatClient (1 test)** - `accept_java_date_format` end-to-end:
+- `test_create_with_java_date_format` (201, Java date pattern passthrough)
+
+**TestBulkOperations (3 tests)** - Multi-forecaster operations:
+- `test_bulk_feed_data_all_success` (200)
+- `test_bulk_feed_data_partial_success` (206)
+- `test_delete_all_forecasters_success` (list + delete chain)
+
+### test_client_edge_cases.py (7 tests)
+
+**TestLoggingProtection (1 test)** - API key redaction in DEBUG logs
+
+**TestClientEdgeCases (4 tests)** - Constructor and connection edge cases:
+- `test_empty_api_key_error`
+- `test_base_url_trailing_slash_stripped`
+- `test_non_json_response_error` (502 HTML response)
+- `test_connection_error_retry` (DNS failure, max retries)
+
+**TestContractExtremeCases (2 tests)** - Client resilience against malformed server responses:
+- `test_server_returns_wrong_data_type` (string where int expected)
+- `test_server_missing_required_field` (missing objectId)
+
+### test_data.py (15 tests)
+
+**TestForecasterCreationSchema (9 tests)** - Pydantic model validation and serialization:
+- `test_request_serialization_mapping` (2 parametrized: minimal + full spec)
+- `test_response_parsing_coercion` (camelCase API response → snake_case model)
+- `test_request_validation_required_fields` (4 parametrized: each required field)
+- `test_response_error_handling_schema`
+- `test_request_logic_constraints` (output_size vs input_size)
+
+**TestJavaDateFormatOption (6 tests)** - `accept_java_date_format` context flag:
+- `test_spec_accepts_java_date_format` (Java pattern accepted with flag)
+- `test_spec_converts_python_to_java_without_flag` (default stores Python format)
+- `test_spec_serialization_passthrough_java` (API serialization keeps Java as-is)
+- `test_spec_serialization_converts_without_flag` (default converts Python→Java)
+- `test_config_keeps_java_format_with_flag` (response parsing keeps Java)
+- `test_config_converts_java_to_python_without_flag` (response converts Java→Python)
 
 ### test_utils.py (15 tests)
-**Credential Loading (5 tests)** - Load from env, missing key/URL errors, dotenv not installed, explicit .env path
 
-**Plotting Functions (5 tests)** - Plot actual vs predicted (with data/empty/missing column), plot time series (with data/empty)
+**TestLoadCredentials (5 tests)** - Credential loading from env / .env file:
+- `test_load_from_env_success`, `test_missing_api_key_error`, `test_missing_api_url_error`, `test_dotenv_not_installed_error`, `test_load_with_dotenv_path`
 
-**Date Conversion (5 tests)** - Smart date parsing (string/non-string/invalid), Python↔Java format conversion
+**TestPlotting (5 tests)** - Plot functions:
+- `test_plot_actual_vs_predicted`, `test_plot_actual_vs_predicted_empty`, `test_plot_actual_vs_predicted_missing_column`, `test_plot_time_series`, `test_plot_time_series_empty`
 
-## Coverage Recommendations
+**TestDateConversion (5 tests)** - Date parsing and format conversion:
+- `test_smart_parse_date_string`, `test_smart_parse_date_non_string`, `test_smart_parse_date_invalid`, `test_convert_strftime_to_java`, `test_convert_java_to_strftime`
 
-**Current state:** Production-ready with 85% coverage
-
-**Remaining uncovered areas:**
-- `utils/generator.py` (16%) - Data generation utilities, not critical for client functionality
-- Minor edge cases in client error handling
-
-**No urgent action needed** - All critical paths are well tested.
+---
 
 ## Test Infrastructure
 
 ### conftest.py - Shared Fixtures
 
-Provides reusable fixtures for all tests:
-
 **Client fixtures:**
-- `api_key` - Test API key
-- `base_url` - API endpoint URL  
-- `client` - Fresh DriftMindClient instance per test
+- `api_key` - Test API key (`"test-api-key"`)
+- `root_url` - API root (`"https://api.thingbook.io/access/api"`)
+- `base_url` - Full versioned URL (`root_url + "/driftmind/v1"`)
+- `client` - Fresh `DriftMindClient` instance per test
+
+**OpenAPI / Contract fixtures (session-scoped):**
+- `spec_dict` - Raw OpenAPI dictionary loaded from `driftmind.data/openapi.yaml`
+- `openapi_spec` - `openapi-core` Spec object
+
+**Validation fixtures:**
+- `validate_contract(response_call, path_pattern)` - Validates both request and response bodies against the OpenAPI spec using jsonschema
+- `get_openapi_response_example(path, method, status_code, example_name)` - Extracts response examples from the OpenAPI spec at runtime, resolving `$ref` and array schemas. This is used to build mock responses for `responses.add()` so that mocked API responses always reflect the current spec rather than stale fixture files.
 
 **Data fixtures:**
-- `minimal_spec_input` - Minimal forecaster configuration
-- `full_spec_input` - Full forecaster configuration
-- `api_creation_response` - Successful creation response
-- `api_validation_error` - Validation error response
+- `load_json_fixture(filename)` - Loads JSON fixtures.
 
-**Helper function:**
-- `load_fixture(filename)` - Loads JSON fixtures from requests/responses directories
-
-### Directory Structure
+### Fixture Directory
 
 ```
-tests/
-├── fixtures/
-│   ├── requests/              # Request payloads (snake_case, as users provide)
-│   │   ├── bulk_feed_data_*.json
-│   │   ├── create_forecaster_minimal.json
-│   │   ├── feed_data_*.json
-│   │   ├── full_spec_input.json
-│   │   └── minimal_spec_input.json
-│   └── responses/
-│       ├── success/           # 2xx responses
-│       │   ├── bulk_feed_data_*.json
-│       │   ├── create_forecaster_201.json
-│       │   ├── delete_forecaster_200.json
-│       │   ├── feed_data_200.json
-│       │   ├── forecast_200.json
-│       │   ├── get_forecaster_data_*.json
-│       │   ├── get_forecaster_details_200.json
-│       │   └── list_forecasters_200.json
-│       └── errors/            # 4xx/5xx responses
-│           ├── bulk_feed_data_417*.json
-│           ├── create_forecaster_401_token_rejected.json
-│           ├── feed_data_400_*.json
-│           ├── forecast_422_insufficient_data.json
-│           └── get_forecaster_details_404_not_found.json
-├── conftest.py                # Shared fixtures and helpers
-├── test_client.py             # Client API tests (30 tests)
-├── test_client_edge_cases.py  # Edge cases & logging (10 tests)
-├── test_data.py               # Model validation tests (9 tests)
-├── test_utils.py              # Utils & plotting tests (15 tests)
-└── record_api_responses.py    # Script to capture real API responses
+tests/fixtures/
+    ├── bulk_feed_data_multiple.json
+    ├── bulk_feed_data_partial.json
+    ├── create_forecaster_minimal.json
+    ├── feed_data_single_point.json
+    ├── feed_data_wrong_features.json
+    ├── full_spec_input.json
+    ├── full_spec_input_java.json
+    └── minimal_spec_input.json
 ```
-
-### Test Files
-
-**test_client.py (30 tests)** - Main API interaction tests using mocked responses
-
-**test_client_edge_cases.py (10 tests)** - Edge cases, logging protection, error handling
-
-**test_data.py (9 tests)** - Pydantic model validation and serialization
-
-**test_utils.py (15 tests)** - Utility functions (credentials, plotting, date conversion)
 
 ---
 
-## Recording New Fixtures
-
-To capture real API responses for new test scenarios:
-
-```bash
-# Run the recorder script
-uv run python tests/record_api_responses.py
-```
-
-**What it does:**
-1. Connects to the real DriftMind API using credentials from `.env`
-2. Executes API calls for various scenarios (success and error cases)
-3. Saves request payloads to `fixtures/requests/` (snake_case format)
-4. Saves responses to:
-   - `fixtures/responses/success/` for 2xx responses
-   - `fixtures/responses/errors/` for 4xx/5xx responses
-
-**Adding new scenarios:**
-1. Edit `tests/record_api_responses.py`
-2. Add your scenario to the `main()` function
-3. Run the script to capture fixtures
-4. Write tests using the new fixtures
-
-## Running Tests
-
-```bash
-# All tests
-uv run pytest tests/
-
-# With coverage
-uv run pytest tests/ --cov=driftmind --cov-report=term-missing
-
-# Verbose output
-uv run pytest tests/ -v
-
-# Specific test file
-uv run pytest tests/test_client.py -v
-
-# Specific test class
-uv run pytest tests/test_client.py::TestCreateForecaster -v
-```
-
 ## Adding New Tests
 
-1. **Capture fixtures** (if needed):
-   - Add scenario to `record_api_responses.py`
-   - Run recorder to capture real responses
+Most tests use OpenAPI spec examples via `get_openapi_response_example` and validate with `validate_contract`:
 
-2. **Write test**:
-   ```python
-   @responses.activate
-   def test_new_scenario(self, client, base_url):
-       request = load_request("endpoint_scenario.json")
-       response = load_response("endpoint_200_scenario.json")
-       
-       responses.add(
-           responses.METHOD,
-           f"{base_url}/path",
-           json=response["body"],
-           status=response["status_code"],
-       )
-       
-       result = client.method(request)
-       assert ...
-   ```
+```python
+@responses.activate
+def test_new_scenario(self, client, base_url, get_openapi_response_example, validate_contract):
+    SPEC_PATH = "/driftmind/v1/forecasters/{forecasterId}/predictions"
+    forecaster_id = "test-id"
+
+    mock_response = copy.deepcopy(get_openapi_response_example(SPEC_PATH, "GET", 200))
+
+    responses.add(
+        responses.GET,
+        f"{base_url}/forecasters/{forecaster_id}/predictions",
+        json=mock_response,
+        status=200,
+    )
+
+    result = client.forecast(forecaster_id)
+    assert "anomaly_score" in result
+
+    validate_contract(responses.calls[0], path_pattern=SPEC_PATH)
+```
+
+For tests that need specific request payloads (e.g., testing client-side validation of user input), add a JSON file to `fixtures/` and load it with `load_json_fixture()`.

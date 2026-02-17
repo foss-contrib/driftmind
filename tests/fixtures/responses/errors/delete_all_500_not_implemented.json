@@ -1,9 +1,0 @@
-{
-  "status_code": 500,
-  "body": {
-    "error": "SYSTEM_UNAVAILABLE",
-    "details": [
-      "An unexpected error occurred. Please try again later."
-    ]
-  }
-}

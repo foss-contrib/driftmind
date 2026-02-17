@@ -1,0 +1,1554 @@
+openapi: 3.0.1
+info:
+  title: DriftMind API Interface
+  version: 1.0.0
+servers:
+  - url: 'https://api.thingbook.io/access/api'
+    description: Production
+  - url: /access/api
+    description: Relative (same host)
+security:
+  - ApiKeyAuth: []
+tags:
+  - name: DriftMind Web Service
+    description: Services for predictive forecasting and anomaly detection.
+paths:
+  /driftmind/v1/forecasters/observations:
+    patch:
+      tags:
+        - DriftMind Web Service
+      summary: Feed observations to multiple forecasters
+      description: >-
+        Appends variable series to existing forecasters. Validates input,
+        charges credit, and updates Redis. Returns detailed status for each item
+        in the batch.
+      operationId: feedDataToForecaster
+      requestBody:
+        description: Batch Feed Payload
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultipleFeedPayload'
+            examples:
+              Single Forecaster:
+                summary: A batch containing a single forecaster update
+                value:
+                  payloadsList:
+                    - forecasterId: abc-123
+                      data:
+                        sin: [0.1, 0.2, 0.3]
+                        cos: [0.9, 0.8, 0.7]
+              Multiple Forecasters:
+                summary: A batch containing multiple forecaster updates
+                value:
+                  payloadsList:
+                    - forecasterId: abc-123
+                      data:
+                        sin: [0.4, 0.5]
+                        cos: [0.6, 0.5]
+                    - forecasterId: xyz-789
+                      data:
+                        x: [1.0, 2.0]
+                        y: [3.0, 4.0]
+        required: true
+      responses:
+        '200':
+          description: All payloads processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+              examples:
+                Full Success:
+                  description: Full Success
+                  value:
+                    message: FORECASTERS_FED
+                    details:
+                      - forecasterId: abc-123
+                        status: 200
+                        message: FED
+                      - forecasterId: xyz-789
+                        status: 200
+                        message: FED
+        '206':
+          description: Partial success (some payloads failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+              examples:
+                Mixed Results:
+                  summary: 'One success, one failure'
+                  description: Mixed Results
+                  value:
+                    message: PARTIALLY_PROCESSED
+                    details:
+                      - forecasterId: abc-123
+                        status: 200
+                        message: FED
+                      - forecasterId: bad-id-001
+                        status: 404
+                        message: FORECASTER_NOT_FOUND
+        '417':
+          description: Expectation Failed (All payloads failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+              examples:
+                Total Failure:
+                  description: Total Failure with different reasons
+                  value:
+                    message: NOT_PROCESSED
+                    details:
+                      - forecasterId: abc-123
+                        status: 400
+                        message: INCONSISTENT_ARRAY_LENGTH
+                      - forecasterId: def-456
+                        status: 400
+                        message: MISSING_COLUMN_sin
+                      - forecasterId: bad-id-001
+                        status: 404
+                        message: FORECASTER_NOT_FOUND
+                Internal Storage Failure:
+                  description: Failure as a result of storage issues
+                  value:
+                    message: NOT_PROCESSED
+                    details:
+                      - forecasterId: xyz-789
+                        status: 500
+                        message: REDIS_UNAVAILABLE
+        '500':
+          description: Internal System Error (Global failure)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                System Crash:
+                  description: System Crash
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details:
+                      - Database connection lost
+  '/driftmind/v1/forecasters/{forecasterId}/observations':
+    get:
+      tags:
+        - DriftMind Web Service
+      summary: Get recent data from a forecaster
+      description: Returns recent time series data points collected by the forecaster.
+      operationId: getRecentData
+      parameters:
+        - name: forecasterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Forecaster data queue retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecasterData'
+              examples:
+                Empty Response:
+                  description: The forecaster hasn't been fed yet
+                  value:
+                    data: {}
+                Regular Response:
+                  description: The forecaster has been properly fed
+                  value:
+                    data:
+                      '01/05/2024 00:04:00':
+                        temperature: 42.9
+                        humidity: 77.2
+                      '01/05/2024 00:05:00':
+                        temperature: 42.5
+                        humidity: 77.1
+                      '01/05/2024 00:06:00':
+                        temperature: 38.2
+                        humidity: 75.0
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details: []
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '404':
+          description: Forecaster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: FORECASTER_NOT_FOUND
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                    details: []
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                    details: []
+                ForecasterCorrupted:
+                  summary: Forecaster object is corrupted or inconsistent
+                  description: ForecasterCorrupted
+                  value:
+                    error: FORECASTER_CORRUPTED
+                    details: []
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details: []
+    post:
+      tags:
+        - DriftMind Web Service
+      summary: Feed a specific forecaster
+      description: >-
+        Targeted feed for a single forecaster. Accepts a map of variable names
+        to data arrays. Returns a simple status message on success.
+      operationId: feedSpecificForecaster
+      parameters:
+        - name: forecasterId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Map of variable names to aligned observation arrays.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: number
+                  format: double
+            examples:
+              Simple Example:
+                description: Simple Example
+                value:
+                  temperature:
+                    - 0.841470985
+                    - 0.909297427
+                    - 0.141120008
+                    - -0.756802495
+                    - -0.958924275
+                  humidity:
+                    - 0.540302306
+                    - -0.416146837
+                    - -0.989992497
+                    - -0.653643621
+                    - 0.283662185
+                  pressure:
+                    - 0.982188275
+                    - 0.473403417
+                    - -0.750535789
+                    - -0.987171428
+                    - -0.62510191
+        required: true
+      responses:
+        '200':
+          description: Payload successfully fed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+              examples:
+                Success:
+                  description: Success
+                  value:
+                    message: FORECASTER_FED
+        '400':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                Array Mismatch:
+                  summary: Columns have different lengths
+                  description: Array Mismatch
+                  value:
+                    error: BAD_REQUEST
+                    details:
+                      - >-
+                        column pressure has inconsistent data array length.
+                        expected: 5, found: 4
+                Missing Column:
+                  summary: Payload lacks required feature
+                  description: Missing Column
+                  value:
+                    error: BAD_REQUEST
+                    details:
+                      - missing column sin
+                Invalid Payload:
+                  summary: Payload does not follow the format or is wrong JSON
+                  description: Invalid Payload
+                  value:
+                    error: BAD_REQUEST
+                    details:
+                      - >-
+                        Request body could not be parsed. Please ensure it is
+                        valid JSON and adheres to the expected schema
+        '404':
+          description: Forecaster Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                Not Found:
+                  description: Not Found
+                  value:
+                    error: FORECASTER_NOT_FOUND
+                    details: []
+        '500':
+          description: Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                System Failure:
+                  description: System Failure
+                  value:
+                    error: INTERNAL_PROCESSING_ERROR
+                    details:
+                      - Redis unavailable
+  /driftmind/v1/forecasters:
+    get:
+      tags:
+        - DriftMind Web Service
+      summary: Returns a list of forecasters owned by the authenticated customer.
+      description: Retrieves a list of all forecasters owned by the authenticated customer.
+      operationId: returnForecasterList
+      responses:
+        '200':
+          description: Successfully retrieved the list of forecasters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ObjectInformation'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details: []
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                    details: []
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                    details: []
+                ForecasterCorrupted:
+                  summary: Forecaster object is corrupted or inconsistent
+                  description: ForecasterCorrupted
+                  value:
+                    error: FORECASTER_CORRUPTED
+                    details: []
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details: []
+    post:
+      tags:
+        - DriftMind Web Service
+      summary: Create a new DriftMind Forecaster
+      description: >-
+        Creates a new multivariate forecaster owned by the authenticated
+        customer.
+      operationId: createPredictor
+      requestBody:
+        description: >-
+          Creation payload containing the forecaster's name and feature list.
+          Features must be unique, non-empty strings.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecasterCreation'
+            examples:
+              SmartCity_Environmental_Zone_A:
+                summary: Smart City – Environmental Sensor Forecaster
+                description: SmartCity_Environmental_Zone_A
+                value:
+                  forecasterName: Environmental Sensor Forecaster
+                  features:
+                    - temperature
+                    - humidity
+                    - pressure
+                  inputSize: 30
+                  outputSize: 1
+              SmartCity_AirQuality:
+                summary: Smart City – Air Quality Forecaster
+                description: SmartCity_AirQuality
+                value:
+                  forecasterName: Air Quality Multivariate Forecaster
+                  features:
+                    - pm2_5
+                    - co_ppm
+                    - temperature_c
+                  inputSize: 50
+                  outputSize: 10
+                  timeStampIntervalInSeconds: 3600
+              IndustrialIoT_MachineHealth:
+                summary: Industrial IoT – Machine Health Forecaster
+                description: IndustrialIoT_MachineHealth
+                value:
+                  forecasterName: Machine Health Forecaster
+                  features:
+                    - vibration_g
+                    - motor_temp_c
+                    - power_kw
+                  inputSize: 30
+                  outputSize: 1
+                  maxClustersAllowed: 50
+                  similarityThreshold: 0.8
+                  timeStampIntervalInSeconds: 30
+                  fitRate: 1
+                  useCustomDateFormat: true
+                  dateFormat: 'dd-MM-yyyy HH:mm'
+                  useInitializationDate: true
+                  initializationDate: '01-01-2025 00:00'
+              SmartCity_TrafficFlow:
+                summary: Smart City – Traffic Flow Forecaster
+                description: SmartCity_TrafficFlow
+                value:
+                  forecasterName: Traffic Flow Forecaster
+                  features:
+                    - vehicle_count
+                    - avg_speed_kmh
+                    - congestion_index
+                  inputSize: 50
+                  outputSize: 10
+                  timeStampIntervalInSeconds: 1800
+        required: true
+      responses:
+        '201':
+          description: Forecaster successfully created
+          headers:
+            Location:
+              description: URL of the created forecaster resource
+              style: simple
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateForecasterResponse'
+              example:
+                features:
+                  - temperature
+                  - humidity
+                  - pressure
+                configuration:
+                  fitRate: '1'
+                  initializationDate: '05-01-2026 11:42:50'
+                  maxClustersAllowed: '100'
+                  dateFormat: 'dd-MM-yyyy HH:mm:ss'
+                  similarityThreshold: '0.8'
+                  timeStampIntervalInSeconds: '60'
+                  outputSize: '1'
+                  inputSize: '30'
+                forecasterId: f4e2a5bb-9360-4802-8f6c-2211e97473b7
+                forecasterName: Environmental Sensor Forecaster
+        '400':
+          description: Invalid input parameters or validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                Incorrect FeaturesList:
+                  summary: Feature names do not match forecaster definition
+                  description: Incorrect FeaturesList
+                  value:
+                    error: VALIDATION_FAILED
+                    details:
+                      - Feature list cannot be empty or found incorrect
+                Missing Body:
+                  summary: Request body is missing
+                  description: Missing Body
+                  value:
+                    error: VALIDATION_FAILED
+                    details:
+                      - Request body is required
+                Invalid Body:
+                  summary: Request body is invalid
+                  description: Invalid Body
+                  value:
+                    error: VALIDATION_FAILED
+                    details:
+                      - >-
+                        Request body could not be parsed. Please ensure it is
+                        valid JSON and adheres to the expected schema
+                Invalid Window Sizes:
+                  summary: Input/Output lengths are not positive integers
+                  value:
+                    error: VALIDATION_FAILED
+                    details:
+                      - Input length must be a positive integer.
+                      - Output length must be a positive integer.
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details:
+                  - creditRequiredMb=0.42
+                  - creditAvailableMb=0.10
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                    details: []
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                    details: []
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details: []
+  '/driftmind/v1/forecasters/{forecasterId}':
+    get:
+      tags:
+        - DriftMind Web Service
+      summary: Get forecaster details
+      description: Returns metadata and configuration details of the specified forecaster.
+      operationId: getDetails
+      parameters:
+        - name: forecasterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Forecaster details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecasterDetails'
+              example:
+                forecasterId: b22a7335-f376-480d-ae2d-1d0858e77e79
+                forecasterName: Environmental Sensor Forecaster
+                configuration:
+                  fitRate: '1'
+                  initializationDate: '03-01-2026 12:59:08'
+                  maxClustersAllowed: '100'
+                  dateFormat: 'dd-MM-yyyy HH:mm:ss'
+                  similarityThreshold: '0.8'
+                  timeStampIntervalInSeconds: '60'
+                  outputSize: '1'
+                  inputSize: '30'
+                features:
+                  temperature:
+                    anomalyScore: 0.6795569530257604
+                    activeClusters: 3
+                    totalCreatedClusters: 3
+                    totalDeletedClusters: 0
+                    totalObservations: 38
+                    totalTimeSeriesProcessed: 19
+                    lastAddtion: '03-01-2026 13:36:08'
+                  humidity:
+                    anomalyScore: 0.680284128653485
+                    activeClusters: 3
+                    totalCreatedClusters: 3
+                    totalDeletedClusters: 0
+                    totalObservations: 38
+                    totalTimeSeriesProcessed: 19
+                    lastAddtion: '03-01-2026 13:36:08'
+                  pressure:
+                    anomalyScore: 0.6826315896664749
+                    activeClusters: 3
+                    totalCreatedClusters: 3
+                    totalDeletedClusters: 0
+                    totalObservations: 38
+                    totalTimeSeriesProcessed: 19
+                    lastAddtion: '03-01-2026 13:36:08'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details: []
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '404':
+          description: Forecaster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: FORECASTER_NOT_FOUND
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                    details: []
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                    details: []
+                ForecasterCorrupted:
+                  summary: Forecaster object is corrupted or inconsistent
+                  description: ForecasterCorrupted
+                  value:
+                    error: FORECASTER_CORRUPTED
+                    details: []
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details: []
+    delete:
+      tags:
+        - DriftMind Web Service
+      summary: Removes a Forecaster Model from the library
+      description: >-
+        Deletes the specified forecaster model from the system. This operation
+        permanently removes the forecaster model and its associated data and it
+        cannot be recovered.
+      operationId: delete
+      parameters:
+        - name: forecasterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Forecaster deleted permanently
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiMessage'
+              example:
+                message: FORECASTER_DELETED
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details: []
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '404':
+          description: Forecaster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: FORECASTER_NOT_FOUND
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                    details: []
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                    details: []
+                ForecasterCorrupted:
+                  summary: Forecaster object is corrupted or inconsistent
+                  description: ForecasterCorrupted
+                  value:
+                    error: FORECASTER_CORRUPTED
+                    details: []
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details: []
+  '/driftmind/v1/forecasters/{forecasterId}/predictions':
+    get:
+      tags:
+        - DriftMind Web Service
+      summary: Get predictions from a forecaster
+      description: Returns predictions generated by the forecaster model.
+      operationId: predict
+      parameters:
+        - name: forecasterId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Forecaster predictions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastingReturn'
+              example:
+                anomalyScore: 0.0
+                numberOfClusters: 0
+                features:
+                  cos:
+                    timestamps:
+                      - '2026-01-31T17:31:05'
+                      - '2026-01-31T17:32:05'
+                    predictions:
+                      - -0.4
+                      - -0.5
+                    upperConfidence:
+                      - -0.4
+                      - -0.5
+                    lowerConfidence:
+                      - -0.4
+                      - -0.5
+                    anomalyScore: 0.0
+                    forecastingMethod: Naive Forecasting
+                    numberOfClusters: 0
+                  sin:
+                    timestamps:
+                      - '2026-01-31T17:32:05'
+                      - '2026-01-31T17:33:05'
+                    predictions:
+                      - 1.3000000000000003
+                      - 1.4000000000000004
+                    upperConfidence:
+                      - 1.2000000000000002
+                      - 1.4000000000000004
+                    lowerConfidence:
+                      - 1.3000000000000003
+                      - 1.4000000000000004
+                    anomalyScore: 0.0
+                    forecastingMethod: Naive Forecasting
+                    numberOfClusters: 0      
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details: []
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '404':
+          description: Forecaster not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: FORECASTER_NOT_FOUND
+                details: []
+        '422':
+          description: >-
+            Forecaster exists but is not ready to generate forecasts
+            (insufficient data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: FORECAST_NOT_READY
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                ForecasterCorrupted:
+                  summary: Forecaster object is corrupted or inconsistent
+                  description: ForecasterCorrupted
+                  value:
+                    error: FORECASTER_CORRUPTED
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+  /driftmind/v1:
+    get:
+      tags:
+        - DriftMind Web Service
+      summary: Returns a list of objects owned by the authenticated customer.
+      description: >-
+        Retrieves a list of all objects owned by the authenticated customer.
+        Objects can be DataSets, Customed Clients (as Web UI or Mobile App), or
+        Forecasters.
+      operationId: returnObjectList
+      responses:
+        '200':
+          description: Successfully retrieved the list of objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ObjectInformation'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: TOKEN_REJECTED
+                details: []
+        '402':
+          description: Insufficient credit to perform the requested operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: CREDIT_EXHAUSTED
+                details: []
+        '403':
+          description: Access rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: ACCESS_REJECTED
+                details: []
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                CreditAccountingFailure:
+                  summary: Credit record could not be written
+                  description: CreditAccountingFailure
+                  value:
+                    error: CREDIT_RECORD_INSERT_FAILED
+                    details: []
+                RedisUnavailable:
+                  summary: Redis is unavailable or failed during access
+                  description: RedisUnavailable
+                  value:
+                    error: REDIS_UNAVAILABLE
+                    details: []
+                ForecasterCorrupted:
+                  summary: Forecaster object is corrupted or inconsistent
+                  description: ForecasterCorrupted
+                  value:
+                    error: FORECASTER_CORRUPTED
+                    details: []
+                InternalProcessingError:
+                  summary: Unexpected internal error
+                  description: InternalProcessingError
+                  value:
+                    error: INTERNAL_SERVER_ERROR
+                    details: []
+components:
+  schemas:
+    FeedResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Status message summary
+        details:
+          type: array
+          description: List of validation results for each forecaster payload
+          items:
+            $ref: '#/components/schemas/MultiFeederSingleResponse'
+    MultiFeederSingleResponse:
+      type: object
+      properties:
+        forecasterId:
+          type: string
+        status:
+          type: integer
+          format: int32
+        message:
+          type: string
+      description: List of validation results for each forecaster payload
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+    FeedPayload:
+      type: object
+      properties:
+        forecasterId:
+          type: string
+          description: Unique identifier of the forecaster previously created.
+          example: forecaster-traffic-002
+        data:
+          type: object
+          additionalProperties:
+            type: array
+            description: Map of variable names to aligned numeric time series arrays.
+            example:
+              temperature:
+                - 18
+                - 19.5
+                - 20.1
+              humidity:
+                - 0.62
+                - 0.6
+                - 0.58
+            items:
+              type: number
+              description: Map of variable names to aligned numeric time series arrays.
+              format: double
+          description: Map of variable names to aligned numeric time series arrays.
+          example:
+            temperature:
+              - 18
+              - 19.5
+              - 20.1
+            humidity:
+              - 0.62
+              - 0.6
+              - 0.58
+      description: Payload used to feed a multivariate time series into a forecaster.
+      example:
+        forecasterId: forecaster-traffic-002
+        data:
+          temperature:
+            - 18
+            - 19.5
+            - 20.1
+            - 20.7
+          humidity:
+            - 0.62
+            - 0.6
+            - 0.58
+            - 0.59
+          pressure:
+            - 1012.2
+            - 1012.5
+            - 1012.1
+            - 1011.9
+    MultipleFeedPayload:
+      type: object
+      properties:
+        payloadsList:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedPayload'
+    ApiMessage:
+      type: object
+      properties:
+        message:
+          type: string
+    CreateForecasterResponse:
+      type: object
+      properties:
+        features:
+          type: array
+          description: List of feature names included in the forecaster.
+          example:
+            - CPU_Usage
+            - Memory_Usage
+          items:
+            type: string
+            description: List of feature names included in the forecaster.
+            example: '["CPU_Usage","Memory_Usage"]'
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+            description: >-
+              Key-value map of forecaster properties/configuration (e.g., input
+              length, output length, Granularity).
+            example: >-
+              {"inputSize":"45","outputSize":"5","timeStampIntervalInSeconds":"60"}
+          description: >-
+            Key-value map of forecaster properties/configuration (e.g., input
+            length, output length, Granularity).
+          example:
+            inputSize: '45'
+            outputSize: '5'
+            timeStampIntervalInSeconds: '60'
+        forecasterId:
+          type: string
+          description: Unique identifier for the forecaster.
+          example: forecast-12345
+        forecasterName:
+          type: string
+          description: Human-readable name for the forecaster.
+          example: CPU & Memory Daily Predictor
+      description: Response returned when a forecaster is successfully created.
+    ForecasterCreation:
+      required:
+        - features
+        - forecasterName
+        - inputSize
+        - outputSize
+      type: object
+      properties:
+        forecasterName:
+          type: string
+          description: Unique name for the forecaster to be created.
+          example: Daily_revenue_predictor
+        features:
+          type: array
+          description: >-
+            List of feature names (columns) to be modeled. Must be non-empty and
+            contain unique, non-blank strings.
+          example:
+            - Product Category A
+            - Product Category B
+            - Product Category C
+          items:
+            type: string
+            description: >-
+              List of feature names (columns) to be modeled. Must be non-empty
+              and contain unique, non-blank strings.
+            example: '["Product Category A","Product Category B","Product Category C"]'
+        inputSize:
+          minimum: 1
+          type: integer
+          description: Number of past time steps used as the input window.
+          format: int32
+          example: 30
+        outputSize:
+          minimum: 1
+          type: integer
+          description: >-
+            Forecast horizon (number of future time steps to predict). Must be
+            <= inputSize.
+          format: int32
+          example: 1
+        maxClustersAllowed:
+          minimum: 1
+          type: integer
+          description: >-
+            Maximum number of clusters allowed. Impacts memory footprint and
+            model complexity.
+          format: int32
+          example: 100
+        similarityThreshold:
+          maximum: 1
+          minimum: 0.6
+          type: number
+          description: >-
+            Similarity threshold for clustering. Range: 0.6 to 1.0. Recommended
+            starting point: 0.8.
+          format: double
+          example: 0.8
+        timeStampIntervalInSeconds:
+          minimum: 1
+          type: integer
+          description: Time interval (seconds) between two consecutive data points.
+          format: int32
+          example: 60
+        fitRate:
+          minimum: 1
+          type: integer
+          description: >-
+            Number of ingestions required to trigger a fit/update cycle. 1 means
+            update on every new point.
+          format: int32
+          example: 1
+        useCustomDateFormat:
+          type: boolean
+          description: >-
+            If true, timestamps are provided in a custom format specified by
+            dateFormat.
+          example: false
+        dateFormat:
+          type: string
+          description: Custom date format used when useCustomDateFormat is true.
+          example: 'dd-MM-yyyy HH:mm:ss'
+        useInitializationDate:
+          type: boolean
+          description: >-
+            If true, the forecaster assumes a fixed initializationDate (useful
+            when timestamps are not present).
+          example: false
+        initializationDate:
+          type: string
+          description: >-
+            Initialization date/time used when useInitializationDate is true.
+            Must match dateFormat.
+          example: '01-01-2025 00:00'
+      description: Configuration parameters required to create a new DriftMind forecaster.
+    DriftMindObjectDetailsClass:
+      type: object
+      properties:
+        anomalyScore:
+          type: number
+          format: double
+        activeClusters:
+          type: integer
+          format: int32
+        totalCreatedClusters:
+          type: integer
+          format: int64
+        totalDeletedClusters:
+          type: integer
+          format: int64
+        totalObservations:
+          type: integer
+          format: int64
+        totalTimeSeriesProcessed:
+          type: integer
+          format: int64
+        lastAddtion:
+          type: string
+      description: List of feature names used by the forecaster.
+      example:
+        - CPU_Usage
+        - Memory_Usage
+    ForecasterDetails:
+      type: object
+      properties:
+        features:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/DriftMindObjectDetailsClass'
+          description: List of feature names used by the forecaster.
+          example:
+            - CPU_Usage
+            - Memory_Usage
+        configuration:
+          type: object
+          additionalProperties:
+            type: string
+            description: >-
+              Key-value map of forecaster properties (e.g., input length, output
+              length, Granularity).
+            example: >-
+              {"inputSize":"45","outputSize":"5","timeStampIntervalInSeconds":"60"}
+          description: >-
+            Key-value map of forecaster properties (e.g., input length, output
+            length, Granularity).
+          example:
+            inputSize: '45'
+            outputSize: '5'
+            timeStampIntervalInSeconds: '60'
+        forecasterId:
+          type: string
+          description: Unique identifier for the forecaster.
+          example: forecast-12345
+        forecasterName:
+          type: string
+          description: Human-readable name for the forecaster.
+          example: CPU & Memory Daily Predictor
+      description: Represents metadata and configuration details of a forecaster instance.
+    ForecasterData:
+      type: object
+      description: >-
+        A multivariate time series container where data is organized by timestamp.
+      properties:
+        data:
+          type: object
+          description: >-
+            The time series payload. Each key is a ISO-formatted or localized 
+            timestamp representing a single observation point in time.
+          additionalProperties:
+            type: object
+            description: >-
+              A map of variate names (features) to their observed numeric values 
+              at this specific timestamp.
+            additionalProperties:
+              type: number
+              format: double
+              description: The numeric value for this specific variate.
+      example:
+        data:
+          '01/05/2024 00:05:00':
+            temperature: 42.5
+            humidity: 77.1
+          '01/05/2024 00:06:00':
+            temperature: 38.2
+            humidity: 75.0
+    ForecastingReturn:
+      type: object
+      properties:
+        anomalyScore:
+          type: number
+          description: >-
+            Average anomaly score across all features for this prediction
+            request (rounded to 2 decimals).
+          format: double
+          example: 0.27
+        numberOfClusters:
+          type: integer
+          description: >-
+            Total number of clusters across features at prediction time (sum of
+            per-feature cluster counts).
+          format: int32
+          example: 12
+        features:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SingleForecasterResult'
+          description: Per-feature forecast results keyed by feature name.
+      example:
+        anomalyScore: 0.0
+        numberOfClusters: 0
+        features:
+          cos:
+            timestamps:
+              - '2026-01-31T17:31:05'
+              - '2026-01-31T17:32:05'
+            predictions:
+              - -0.4
+              - -0.5
+            upperConfidence:
+              - -0.4
+              - -0.5
+            lowerConfidence:
+              - -0.4
+              - -0.5
+            anomalyScore: 0.0
+            forecastingMethod: Naive Forecasting
+            numberOfClusters: 0
+          sin:
+            timestamps:
+              - '2026-01-31T17:32:05'
+              - '2026-01-31T17:33:05'
+            predictions:
+              - 1.3000000000000003
+              - 1.4000000000000004
+            upperConfidence:
+              - 1.2000000000000002
+              - 1.4000000000000004
+            lowerConfidence:
+              - 1.3000000000000003
+              - 1.4000000000000004
+            anomalyScore: 0.0
+            forecastingMethod: Naive Forecasting
+            numberOfClusters: 0      
+      description: >-
+        Forecast results for a multivariate forecaster. Contains an overall
+        anomaly score and per-feature forecast outputs.
+    SingleForecasterResult:
+      type: object
+      properties:
+        timestamps:
+          type: array
+          description: Forecast timestamps for the predicted horizon.
+          example:
+            - '2025-12-31 10:00:00'
+            - '2025-12-31 11:00:00'
+          items:
+            type: string
+            description: Forecast timestamps for the predicted horizon.
+            example: '["2025-12-31 10:00:00","2025-12-31 11:00:00"]'
+        predictions:
+          type: array
+          description: Predicted values for the feature.
+          example:
+            - 20.7
+            - 20.9
+          items:
+            type: number
+            description: Predicted values for the feature.
+            format: double
+        upperConfidence:
+          type: array
+          description: Upper confidence bound per predicted point.
+          example:
+            - 21.3
+            - 21.4
+          items:
+            type: number
+            description: Upper confidence bound per predicted point.
+            format: double
+        lowerConfidence:
+          type: array
+          description: Lower confidence bound per predicted point.
+          example:
+            - 20.1
+            - 20.4
+          items:
+            type: number
+            description: Lower confidence bound per predicted point.
+            format: double
+        anomalyScore:
+          type: number
+          description: Anomaly score for this feature at prediction time.
+          format: double
+          example: 0.12
+        forecastingMethod:
+          type: string
+          description: 'Forecasting method used for this feature (e.g., CLUSTER, FALLBACK).'
+          example: CLUSTER
+        numberOfClusters:
+          type: integer
+          description: >-
+            Number of clusters used/available for this feature at prediction
+            time.
+          format: int32
+          example: 4
+      description: Forecast output for a single feature.
+      example:
+        temperature:
+          timestamps:
+            - '2025-12-31 10:00:00'
+          predictions:
+            - 20.7
+          upperConfidence:
+            - 21.3
+          lowerConfidence:
+            - 20.1
+          anomalyScore: 0.12
+          forecastingMethod: CLUSTER
+          numberOfClusters: 4
+    ObjectInformation:
+      type: object
+      properties:
+        objectId:
+          type: string
+          description: Unique identifier of the object.
+          example: object-7e4b1a21
+        objectName:
+          type: string
+          description: Human-readable name assigned to the object.
+          example: Web Traffic Forecaster
+        createdAt:
+          type: string
+          description: 'Date when the object was created, in format YYYY-MM-DD.'
+          example: '2025-09-14'
+        createdBy:
+          type: string
+          description: Developer token that created the object.
+          example: VfYZ3hLQk6FohdPTkKXB0lC30DworzI5Mz....
+        objectType:
+          type: string
+          description: >-
+            Type or category of the object (e.g., 'FORECASTER', 'OFFLINE
+            DETECTOR', 'DATASET', etc).
+          example: FORECASTER
+        dataProcessed:
+          type: number
+          description: >-
+            Amount of data processed by the object expressed in
+            MB(human-readable).
+          format: double
+        requestsProcessed:
+          type: integer
+          description: Number of API or internal requests handled by this object.
+          format: int64
+          example: 328
+      description: >-
+        Represents a tracked object in the DriftMind system, including metadata
+        and statistics.
+      example:
+        objectId: 1ae577ed-e104-4206-89e4-f9f17017d14c
+        objectName: RecorderTest_Minimal
+        createdAt: '2026-01-31'
+        createdBy: 
+          Wl4SjAhdXbpq8EzTjOVYJuHFYxy2LTE4ODDg3MTY1NzEzNDU3NTE2NT0g4OTM1NDUzMTc5NjE3NzE3MjAxMw
+        objectType: FORECASTER
+        dataProcessed: -0.01
+        requestsProcessed: 1
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      description: Authentication token tied to the customer account.
+      name: Auth
+      in: header

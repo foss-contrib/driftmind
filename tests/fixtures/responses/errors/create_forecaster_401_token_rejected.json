@@ -1,7 +1,0 @@
-{
-  "status_code": 401,
-  "body": {
-    "error": "TOKEN_REJECTED",
-    "details": []
-  }
-}

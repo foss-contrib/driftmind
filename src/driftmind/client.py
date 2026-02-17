@@ -114,6 +114,7 @@ class DriftMindClient:
         enable_logging_protection: bool = True,
         pool_connections: int = DEFAULT_POOL_CONNECTIONS,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
+        accept_java_date_format: bool = False,
     ) -> None:
         """Initialize the DriftMindClient.
 
@@ -139,6 +140,7 @@ class DriftMindClient:
         self._timeout = timeout
         self._max_retries = max_retries
         self._retry_delay = retry_delay
+        self.accept_java_date_format = accept_java_date_format
 
         # Configure session with connection pooling
         if session is None:
@@ -159,6 +161,13 @@ class DriftMindClient:
             for logger_name in ["urllib3", "requests"]:
                 logger = logging.getLogger(logger_name)
                 logger.addFilter(_SensitiveDataFilter())
+
+    def _get_context(self, target: str = "internal") -> dict:
+        """Helper method to generate context"""
+        return {
+            "target": target,
+            "accept_java_date_format": self.accept_java_date_format,
+        }
 
     def _headers(self) -> dict[str, str]:
         """Build default HTTP headers for API requests.
@@ -330,49 +339,39 @@ class DriftMindClient:
     def create_forecaster(
         self, payload: ForecasterSpec | dict[str, Any]
     ) -> dict[str, Any]:
-        """Create a new forecaster on the DriftMind API.
-
-        Args:
-            payload: Forecaster configuration, either as a ``ForecasterSpec``
-                object or a JSON-serializable dictionary.
-
-        Returns:
-            A dictionary containing at least the key ``"forecaster_id"`` on
-            success.
-
-        Raises:
-            DriftMindError: If validation of the configuration fails or a
-                network-level error occurs.
-            DriftMindApiError: If the API returns a success status but the
-                response body/headers are missing the required identity information.
-            ForecasterCreationError: If the API reports a client error (4xx)
-                or server error (5xx).
-        """
+        # 1. Outgoing Validation: Use context to allow Java strings if configured
         try:
-            forecast_config = ForecasterSpec.model_validate(payload)
+            forecast_config = ForecasterSpec.model_validate(
+                payload, context=self._get_context()
+            )
         except ValidationError as err:
             raise DriftMindError(f"Invalid forecaster configuration: {err}") from err
 
+        # 2. API Preparation: Target 'api' triggers conversion to Java patterns
         path = FORECASTERS_PATH
-        payload = forecast_config.model_dump(
+        api_payload = forecast_config.model_dump(
             mode="json",
             by_alias=True,
             exclude_none=True,
-            context={"target": "api"},
+            context=self._get_context(target="api"),
         )
-        resp = self._request("POST", path, json=payload)
+        resp = self._request("POST", path, json=api_payload)
 
         data = self._parse_and_check(resp, error_class=ForecasterCreationError)
 
-        # 3. Incoming Validation
+        # 3. Incoming Validation: Respect flag when reading back the config
         try:
             forecaster_creation_response = ForecasterCreationResponse.model_validate(
-                data
+                data,
+                context=self._get_context(),
             )
+            # IMPORTANT: Use default context (target="internal") so the user
+            # gets the format they expect (Python or Java) in the return dict.
             validated_data = forecaster_creation_response.model_dump(
                 mode="json",
                 by_alias=False,
                 exclude_none=True,
+                context=self._get_context(),
             )
         except ValidationError as err:
             raise DriftMindApiError(
@@ -416,11 +415,17 @@ class DriftMindClient:
         data = self._parse_and_check(resp, error_class=GetForecasterDetailsError)
 
         try:
-            forecaster_details_response = ForecasterDetails.model_validate(data)
+            # 1. Validation: Tunnels context to ForecasterConfig to handle date conversion
+            forecaster_details_response = ForecasterDetails.model_validate(
+                data, context=self._get_context()
+            )
+
+            # 2. Dump: Context ensures the serializer respects the user's date format preference
             validated_data = forecaster_details_response.model_dump(
                 mode="json",
                 by_alias=False,
                 exclude_none=True,
+                context=self._get_context(),
             )
         except ValidationError as err:
             raise DriftMindApiError(
@@ -543,8 +548,7 @@ class DriftMindClient:
 
         Raises:
             DriftMindError: If forecaster_id is empty/whitespace or a network error occurs.
-            ForecastError: If the API reports a 4xx/5xx error (for example,
-                the forecaster does not exist or an authorization error occurs).
+            ForecastError: If the API reports a 4xx/5xx error.
             DriftMindApiError: If the response cannot be validated.
         """
         path = FORECASTER_PREDICTIONS_PATH.format(forecaster_id=forecaster_id)
@@ -553,11 +557,17 @@ class DriftMindClient:
         data = self._parse_and_check(resp, error_class=ForecastError)
 
         try:
-            forecast_response = PredictionResponse.model_validate(data)
+            # 1. Validation: Use context to handle potential Java patterns in metadata
+            forecast_response = PredictionResponse.model_validate(
+                data, context=self._get_context()
+            )
+
+            # 2. Dump: Ensure serialized output respects accept_java_date_format
             validated_data = forecast_response.model_dump(
                 mode="json",
                 by_alias=False,
                 exclude_none=True,
+                context=self._get_context(),  # Crucial for serializer consistency
             )
         except ValidationError as err:
             raise DriftMindApiError(

@@ -12,6 +12,7 @@ from pydantic import (
     Field,
     RootModel,
     SerializationInfo,
+    ValidationInfo,
     field_serializer,
     field_validator,
     model_validator,
@@ -182,12 +183,17 @@ class ForecasterSettingsBase(BaseModel):
 
     @field_validator("date_format")
     @classmethod
-    def validate_python_format_string(cls, v: str | None) -> str | None:
-        """Verify the string is a valid Python strftime format."""
+    def validate_python_format_string(
+        cls, v: str | None, info: ValidationInfo
+    ) -> str | None:
         if v is None:
             return v
+
+        # Skip Python validation if we are in 'accept_java' mode
+        if info.context and info.context.get("accept_java_date_format"):
+            return v
+
         try:
-            # Attempt to format a dummy date to see if it's a valid pattern
             datetime.now().strftime(v)
         except (ValueError, TypeError) as exc:
             raise ValueError(f"Invalid Python date format string: {v}") from exc
@@ -222,13 +228,17 @@ class ForecasterSettingsBase(BaseModel):
         Only converts to Java if the context explicitly asks for 'api' target.
         Otherwise, keeps the Python format.
         """
+        context = info.context or {}
+
         if date_format is None:
             return None
 
-        # Check if we are dumping for the API or for internal Python use
-        if info.context and info.context.get("target") == "api":
-            return convert_strftime_to_java(date_format)
+        # Skip conversion if user wants to talk Java directly
+        if context.get("accept_java_date_format"):
+            return date_format
 
+        if context.get("target") == "api":
+            return convert_strftime_to_java(date_format)
         return date_format
 
     @field_serializer("initialization_date", when_used="json")
@@ -240,6 +250,9 @@ class ForecasterSettingsBase(BaseModel):
 
         # Use date_format from the model instance
         fmt = self.date_format if self.date_format else "%Y-%m-%d %H:%M:%S"
+        context = info.context or {}
+        if context.get("accept_java_date_format"):
+            fmt = convert_java_to_strftime(fmt)
         return v.strftime(fmt)
 
 
@@ -277,11 +290,13 @@ class ForecasterConfig(ForecasterSettingsBase):
 
     @field_validator("date_format", mode="before")
     @classmethod
-    def handle_java_date_conversion(cls, v: str | None) -> str | None:
-        """
-        Intersects the raw API value. If it's a Java-style string,
-        it converts it to Python style before the rest of the model sees it.
-        """
+    def handle_java_date_conversion(
+        cls, v: str | None, info: ValidationInfo
+    ) -> str | None:
+        # If user wants Java, don't attempt to convert it to Python
+        if info.context and info.context.get("accept_java_date_format"):
+            return v
+
         if isinstance(v, str) and "%" not in v:
             return convert_java_to_strftime(v)
         return v

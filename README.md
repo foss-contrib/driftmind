@@ -12,6 +12,7 @@ DriftMind is particularly well-suited for:
 - ⚡ **Cold-start forecasting**: predictions available immediately without long historical training.
 - 🔍 **On-the-fly anomaly detection** using dynamic clustering.
 - 📈 **Scalable deployments** where thousands of forecasters can be created, queried, and updated in real time.
+
 ## 🔬 Core Concepts
 
 At its core, DriftMind blends:
@@ -51,7 +52,7 @@ The **DriftMind Client** is a lightweight Python package that encapsulates the [
 - 🔒 Built-in credential protection in logs.
 - ✅ Comprehensive error handling with specific exceptions.
 - 📊 Pydantic v2 models with automatic validation.
-- 🧪 85% test coverage with 65 tests.
+- 🧪 85% test coverage with 59 tests.
 
 ---
 
@@ -93,9 +94,9 @@ uv sync --dev --extra examples
 
 ## ⚠️ Migration from 0.2.x (Breaking Changes)
 
-Version **0.4.1** introduces a major change to provide a more idiomatic Python experience: **API response keys are now automatically converted from `camelCase` to `snake_case`.**
+Version **0.4.0** introduced a major change to provide a more idiomatic Python experience: **API response keys are now automatically converted from `camelCase` to `snake_case`.**
 
-| Old Behavior (v0.2.0)         | New Behavior (v0.4.1)          |
+| Old Behavior (v0.2.0)         | New Behavior (v0.4.0+)         |
 | ----------------------------- | ------------------------------ |
 | `result["anomalyScore"]`      | `result["anomaly_score"]`      |
 | `result["forecastingMethod"]` | `result["forecasting_method"]` |
@@ -147,10 +148,10 @@ uv run pre-commit install
 
 ### 🧪 Testing
 
-The DriftMind client includes a comprehensive test suite with **65 tests** achieving **85% code coverage**:
+The DriftMind client includes a comprehensive test suite with **59 tests** achieving **85% code coverage**:
 
-- **Client API tests** (30 tests) - All endpoints, success/error cases, bulk operations
-- **Edge cases & logging** (10 tests) - Error handling, logging protection, session management  
+- **Client API tests** (28 tests) - All endpoints, success/error cases, bulk operations
+- **Edge cases & logging** (7 tests) - Error handling, logging protection, contract extremes
 - **Model validation** (9 tests) - Pydantic serialization, field validation
 - **Utils & plotting** (15 tests) - Credential loading, date conversion, plotting functions
 
@@ -187,7 +188,7 @@ uv run pre-commit run --all-files
 
 ### 🚀 Continuous Integration (CI)
 
-All pushes and pull requests are automatically tested via **GitHub Actions** on both **Windows and Ubuntu** to ensure cross-platform compatibility and maintain code integrity.
+All pushes and pull requests are automatically tested via **GitHub Actions** on **Ubuntu** to ensure code integrity.
 
 ---
 
@@ -601,7 +602,7 @@ jupyter lab examples/cold_start_demo.ipynb
 
 ## ⚠️ Common Errors
 
-> **📘 For complete error handling guide, see [docs/API.md#error-handling**](https://www.google.com/search?q=docs/API.md%23error-handling)
+> **📘 For complete error handling guide, see [docs/API.md#error-handling](docs/API.md#error-handling)**
 
 ### 🪟 Windows: C++ Build Tools Missing
 
@@ -609,7 +610,7 @@ If you see an error like `error: Microsoft Visual C++ 14.0 or greater is require
 
 **The Fix:**
 
-1. Download the [Visual Studio Build Tools](https://www.google.com/search?q=https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+1. Download the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 2. Run the installer and select **"Desktop development with C++"**.
 3. Restart your terminal and run `uv sync` again.
 

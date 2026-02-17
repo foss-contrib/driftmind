@@ -1,7 +1,0 @@
-{
-  "status_code": 404,
-  "body": {
-    "error": "NOT_FOUND",
-    "details": []
-  }
-}

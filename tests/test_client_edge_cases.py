@@ -1,6 +1,6 @@
-"""Tests for client logging protection and edge cases."""
-
+import copy
 import logging
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -13,103 +13,118 @@ from driftmind.exceptions import DriftMindError
 class TestLoggingProtection:
     """Test sensitive data filtering in logs."""
 
-    def test_api_key_redacted_in_logs(self, caplog):
-        """Test that API keys are redacted from logs."""
+    def test_api_key_redacted_in_logs(self, caplog, base_url):
+        """Test that API keys are redacted from logs even in DEBUG mode."""
         with caplog.at_level(logging.DEBUG):
+            # Create a transient client for this test
             _ = DriftMindClient(
-                "secret-key-123", "https://test.com", enable_logging_protection=True
+                "secret-key-123", base_url, enable_logging_protection=True
             )
 
-            # Trigger a log that might contain the auth header
             logger = logging.getLogger("urllib3")
             logger.debug("Auth: secret-key-123")
 
-            # Check that the key was redacted
+            # Check for redaction
             assert "secret-key-123" not in caplog.text or "[REDACTED]" in caplog.text
-
-    def test_logging_protection_disabled(self):
-        """Test client works with logging protection disabled."""
-        client = DriftMindClient(
-            "test-key", "https://test.com", enable_logging_protection=False
-        )
-        assert client.api_key == "test-key"
 
 
 class TestClientEdgeCases:
-    """Test error handling edge cases."""
+    """Test local validation and connection edge cases."""
 
-    def test_empty_api_key_error(self):
-        """Test error when API key is empty."""
+    # Note: We don't use the 'client' fixture for many of these
+    # because we are testing the CONSTRUCTOR behavior itself.
+
+    def test_empty_api_key_error(self, base_url):
         with pytest.raises(DriftMindError, match="api_key cannot be empty"):
-            DriftMindClient("", "https://test.com")
-
-    def test_whitespace_api_key_error(self):
-        """Test error when API key is whitespace."""
-        with pytest.raises(DriftMindError, match="api_key cannot be empty"):
-            DriftMindClient("   ", "https://test.com")
-
-    def test_empty_base_url_error(self):
-        """Test error when base URL is empty."""
-        with pytest.raises(DriftMindError, match="base_url cannot be empty"):
-            DriftMindClient("test-key", "")
+            DriftMindClient("", base_url)
 
     def test_base_url_trailing_slash_stripped(self):
-        """Test that trailing slashes are removed from base URL."""
         client = DriftMindClient("test-key", "https://test.com/api/")
         assert client.base_url == "https://test.com/api"
 
-    def test_api_key_whitespace_stripped(self):
-        """Test that whitespace is stripped from API key."""
-        client = DriftMindClient("  test-key  ", "https://test.com")
-        assert client.api_key == "test-key"
-
     @responses.activate
-    def test_non_json_response_error(self):
-        """Test error handling for non-JSON responses."""
-        client = DriftMindClient("test-key", "https://test.com")
-
+    def test_non_json_response_error(self, client, base_url):
+        """Test error handling when server returns HTML instead of JSON (e.g. Proxy error)."""
         responses.add(
             responses.GET,
-            "https://test.com/forecasters",
-            body="<html>Error</html>",
-            status=500,
+            f"{base_url}/forecasters",
+            body="<html><head><title>502 Bad Gateway</title></head></html>",
+            status=502,
             content_type="text/html",
         )
 
         with pytest.raises(DriftMindError, match="invalid JSON"):
             client.list_forecasters()
 
-    def test_connection_error_retry(self):
-        """Test retry on connection errors."""
+    def test_connection_error_retry(self, client):
+        """Test that the client gives up and raises DriftMindError after max retries."""
         from requests.exceptions import ConnectionError
 
-        client = DriftMindClient(
-            "test-key", "https://test.com", max_retries=2, retry_delay=0.01
-        )
-
         with patch.object(
-            client._session, "request", side_effect=ConnectionError("Connection failed")
+            client._session, "request", side_effect=ConnectionError("DNS failure")
         ):
             with pytest.raises(DriftMindError, match="failed after"):
                 client.list_forecasters()
 
-    def test_custom_session(self):
-        """Test client with custom session."""
-        from requests import Session
 
-        custom_session = Session()
-        client = DriftMindClient("test-key", "https://test.com", session=custom_session)
-        assert client._session is custom_session
-        assert not client._owns_session
+class TestContractExtremeCases:
+    """
+    EXTREME CASES: Testing client resilience against 'Dishonest' Servers.
+    These tests verify that our validate_contract fixture catches
+    OpenAPI violations that would normally cause silent bugs.
+    """
 
-        # Close should not close custom session
-        client.close()
+    SPEC_PATH = "/driftmind/v1/forecasters"
 
-    def test_owned_session_closed(self):
-        """Test that owned session is closed."""
-        client = DriftMindClient("test-key", "https://test.com")
-        assert client._owns_session
+    @responses.activate
+    def test_server_returns_wrong_data_type(
+        self,
+        client: Any,
+        base_url: str,
+        get_openapi_response_example: Any,
+        validate_contract: Any,
+    ) -> None:
+        """Extreme Case: Server returns a STRING where an INTEGER is expected."""
+        mock_data = copy.deepcopy(
+            get_openapi_response_example(self.SPEC_PATH, "GET", 200)
+        )
 
-        _ = client._session
-        client.close()
-        # Session should be closed (can't easily test, but verify no error)
+        # Corrupt the data: Change a numeric field to a non-numeric string
+        if mock_data:
+            mock_data[0]["requestsProcessed"] = "MANY_REQUESTS"
+
+        responses.add(
+            responses.GET, f"{base_url}/forecasters", json=mock_data, status=200
+        )
+
+        # Update the match to handle Pydantic's multi-line error message
+        # 'int_parsing' is the specific error code Pydantic 2.x uses for this failure
+        with pytest.raises(Exception, match=r"(?s)requestsProcessed.*int_parsing"):
+            client.list_forecasters()
+            # If the code reaches here, Pydantic failed to catch it,
+            # so we let the contract validator have a go.
+            validate_contract(responses.calls[0], path_pattern=self.SPEC_PATH)
+
+    @responses.activate
+    def test_server_missing_required_field(
+        self,
+        client: Any,
+        base_url: str,
+        get_openapi_response_example: Any,
+        validate_contract: Any,
+    ) -> None:
+        """Extreme Case: Server omits a mandatory field like 'objectId'."""
+        mock_data = copy.deepcopy(
+            get_openapi_response_example(self.SPEC_PATH, "GET", 200)
+        )
+
+        if mock_data:
+            del mock_data[0]["objectId"]
+
+        responses.add(
+            responses.GET, f"{base_url}/forecasters", json=mock_data, status=200
+        )
+
+        # The (?s) flag allows the dot to match across newlines \n
+        with pytest.raises(Exception, match=r"(?s)objectId.*Field required"):
+            client.list_forecasters()

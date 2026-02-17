@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "driftmind"
-version = "0.4.1"
+version = "0.4.2"
 description = "Python client and demo utilities for DriftMind forecasting API"
 authors = [
     { name = "Thingbook.io", email = "roman.f@thingbook.io" }
@@ -12,7 +12,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
-keywords = ["dimensionality-reduction", "machine-learning", "scikit-learn"]
+keywords = ["forecasting", "anomaly-detection", "time-series", "online-learning"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -43,6 +43,9 @@ dev = [
     "responses>=0.23.0",
     "ruff>=0.4.0",
     "pre-commit>=3.0.0",
+    "jsonschema>=4.0.0",
+    "openapi-core>=0.19.0",
+    "openapi-spec-validator>=0.7.1",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +61,11 @@ Repository = "https://github.com/thngbk/driftmind"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/driftmind"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/driftmind/data/openapi.yaml",
+]
 
 [tool.ruff]
 line-length = 88
