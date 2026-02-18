@@ -117,6 +117,11 @@ def client(api_key: str, base_url: str) -> DriftMindClient:
 
 
 @pytest.fixture
+def native_client(api_key: str, base_url: str) -> DriftMindClient:
+    return DriftMindClient(api_key, base_url, use_api_native_format=True)
+
+
+@pytest.fixture
 def load_json_fixture():
     """Returns a function that loads JSON fixtures from the fixtures directory."""
 

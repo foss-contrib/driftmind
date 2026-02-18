@@ -37,7 +37,7 @@ These resources detail the **single-pass clustering mechanism** and **temporal t
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/thngbk/driftmind/actions/workflows/test.yml/badge.svg)](https://github.com/thngbk/driftmind/actions/workflows/test.yml)
-[![Test Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen.svg)](tests/TESTING.md)
+[![Test Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen.svg)](tests/TESTING.md)
 
 The **DriftMind Client** is a lightweight Python package that encapsulates the [DriftMind API](https://api.thingbook.io/access/swagger/index.html). It makes it easy to:
 
@@ -52,7 +52,7 @@ The **DriftMind Client** is a lightweight Python package that encapsulates the [
 - 🔒 Built-in credential protection in logs.
 - ✅ Comprehensive error handling with specific exceptions.
 - 📊 Pydantic v2 models with automatic validation.
-- 🧪 85% test coverage with 59 tests.
+- 🧪 88% test coverage with 74 tests.
 
 ---
 
@@ -101,16 +101,30 @@ Version **0.4.0** introduced a major change to provide a more idiomatic Python e
 | `result["anomalyScore"]`      | `result["anomaly_score"]`      |
 | `result["forecastingMethod"]` | `result["forecasting_method"]` |
 
-### How to use the Legacy Version
+### How to keep using camelCase keys
 
-If your existing codebase depends on the `camelCase` keys and you are not ready to upgrade, you can install the legacy version using the `v0.2.0` tag:
+If your existing codebase depends on `camelCase` keys, you can enable native API format mode on the current version. This accepts camelCase input and returns camelCase output:
+
+```python
+client = DriftMindClient(
+    api_key=creds["DRIFTMIND_API_KEY"],
+    base_url=creds["DRIFTMIND_API_URL"],
+    use_api_native_format=True,  # camelCase keys in and out
+)
+
+result = client.forecast(forecaster_id)
+print(result["anomalyScore"])           # camelCase output
+print(result["forecastingMethod"])      # camelCase output
+```
+
+Alternatively, you can install the legacy version using the `v0.2.0` tag:
 
 ```bash
 # Using uv
-uv pip install git+[https://github.com/thngbk/driftmind.git@v0.2.0](https://github.com/thngbk/driftmind.git@v0.2.0)
+uv pip install git+https://github.com/thngbk/driftmind.git@v0.2.0
 
 # Using pip
-pip install git+[https://github.com/thngbk/driftmind.git@v0.2.0](https://github.com/thngbk/driftmind.git@v0.2.0)
+pip install git+https://github.com/thngbk/driftmind.git@v0.2.0
 ```
 
 ---
@@ -127,7 +141,7 @@ Edit `.env` with your credentials:
 
 ```text
 DRIFTMIND_API_KEY=<your_api_key>
-DRIFTMIND_API_URL=[https://api.thingbook.io/access/api/driftmind](https://api.thingbook.io/access/api/driftmind)
+DRIFTMIND_API_URL=https://api.thingbook.io/access/api/driftmind
 ```
 
 ---
@@ -148,19 +162,16 @@ uv run pre-commit install
 
 ### 🧪 Testing
 
-The DriftMind client includes a comprehensive test suite with **59 tests** achieving **85% code coverage**:
+The DriftMind client includes a comprehensive test suite with **74 tests** achieving **88% code coverage**:
 
-- **Client API tests** (28 tests) - All endpoints, success/error cases, bulk operations
+- **Client API tests** (37 tests) - All endpoints, success/error cases, bulk operations, native format mode
 - **Edge cases & logging** (7 tests) - Error handling, logging protection, contract extremes
-- **Model validation** (9 tests) - Pydantic serialization, field validation
+- **Model validation** (15 tests) - Pydantic serialization, field validation, Java date format
 - **Utils & plotting** (15 tests) - Credential loading, date conversion, plotting functions
 
 ```bash
-# Run all tests using uv (recommended for src layout)
+# Run all tests (coverage is enabled by default via pyproject.toml)
 uv run python -m pytest tests/
-
-# Run with coverage report
-uv run python -m pytest tests/ --cov=driftmind --cov-report=term-missing
 ```
 
 See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation.
@@ -252,17 +263,19 @@ with DriftMindClient(
 
 **Configuration Parameters:**
 
-| Parameter                   | Type    | Required | Default | Description                                                                  |
-|-----------------------------|---------|----------|---------|------------------------------------------------------------------------------|
-| `api_key`                   | str     | ✅ Yes    | –       | API authentication key                                                       |
-| `base_url`                  | str     | ✅ Yes    | –       | DriftMind API endpoint URL                                                   |
-| `session`                   | Session | No       | None    | Custom requests.Session (for advanced use)                                   |
-| `timeout`                   | float   | No       | 10.0    | Request timeout in seconds                                                   |
-| `max_retries`               | int     | No       | 3       | Maximum retry attempts for 5xx errors, 429 rate limits, and network failures |
-| `retry_delay`               | float   | No       | 1.0     | Initial delay between retries (exponential backoff: 1s, 2s, 4s, ...)         |
-| `enable_logging_protection` | bool    | No       | True    | Automatically redact API keys from debug logs                                |
-| `pool_connections`          | int     | No       | 10      | Number of connection pools to cache per host                                 |
-| `pool_maxsize`              | int     | No       | 10      | Maximum number of connections to save in the pool                            |
+| Parameter                   | Type    | Required | Default | Description                                                                          |
+|-----------------------------|---------|----------|---------|--------------------------------------------------------------------------------------|
+| `api_key`                   | str     | ✅ Yes    | –       | API authentication key                                                               |
+| `base_url`                  | str     | ✅ Yes    | –       | DriftMind API endpoint URL                                                           |
+| `session`                   | Session | No       | None    | Custom requests.Session (for advanced use)                                            |
+| `timeout`                   | float   | No       | 10.0    | Request timeout in seconds                                                            |
+| `max_retries`               | int     | No       | 3       | Maximum retry attempts for 5xx errors, 429 rate limits, and network failures          |
+| `retry_delay`               | float   | No       | 1.0     | Initial delay between retries (exponential backoff: 1s, 2s, 4s, ...)                  |
+| `enable_logging_protection` | bool    | No       | True    | Automatically redact API keys from debug logs                                         |
+| `pool_connections`          | int     | No       | 10      | Number of connection pools to cache per host                                          |
+| `pool_maxsize`              | int     | No       | 10      | Maximum number of connections to save in the pool                                     |
+| `accept_java_date_format`   | bool    | No       | False   | Accept Java SimpleDateFormat patterns instead of Python strftime                      |
+| `use_api_native_format`     | bool    | No       | False   | Accept and return camelCase keys matching the raw API format (pre-v0.3 compatibility) |
 
 ---
 
@@ -378,26 +391,29 @@ with DriftMindClient(
     api_key=creds["DRIFTMIND_API_KEY"], 
     base_url=creds["DRIFTMIND_API_URL"]
 ) as client:
-    payloads = [
-        {
-            "forecaster_id": forecaster_id_1,
-            "data": {
-                "motor_temp_c": [18.0, 19.5, 20.1, 20.7],
-                "power_kw": [0.62, 0.60, 0.58, 0.59],
-                "vibration_g": [1012.2, 1012.5, 1012.1, 1011.9]
+    payload = {
+        "payloads_list": [
+            {
+                "forecaster_id": forecaster_id_1,
+                "data": {
+                    "motor_temp_c": [18.0, 19.5, 20.1, 20.7],
+                    "power_kw": [0.62, 0.60, 0.58, 0.59],
+                    "vibration_g": [1012.2, 1012.5, 1012.1, 1011.9]
+                }
+            },
+            {
+                "forecaster_id": forecaster_id_2,
+                "data": {
+                    "temperature": [22.5, 23.1, 23.8],
+                    "humidity": [0.65, 0.63, 0.61]
+                }
             }
-        },
-        {
-            "forecaster_id": forecaster_id_2,
-            "data": {
-                "temperature": [22.5, 23.1, 23.8],
-                "humidity": [0.65, 0.63, 0.61]
-            }
-        }
-    ]
-    
-    result = client.bulk_feed_data(payloads)
-    print(f"Status: {result['message']}")
+        ]
+    }
+
+    result = client.bulk_feed_data(payload)
+    for r in result["results"]:
+        print(f"{r['forecaster_id']}: {r['message']}")
 ```
 
 **Timestamp assignment:**
@@ -585,17 +601,17 @@ with DriftMindClient(
 
 Run it with: `uv run python examples/quickstart.py`
 
-**2. Jupyter Notebook** ([`examples/cold_start_demo.ipynb`](examples/cold_start_demo.ipynb)) - Interactive demo with:
+**2. Jupyter Notebook** ([`examples/demo.ipynb`](examples/demo.ipynb)) - Interactive demo with:
 
 - Synthetic data generation with drifts
 - Online learning loop (600 iterations)
 - Visualization of actual vs predicted values
 - Anomaly score and cluster evolution plots
 
-To run the notebook, install JupyterLab:
+To run the notebook, install the examples dependencies (JupyterLab + Plotly):
 ```bash
-uv pip install -e ".[examples]"
-jupyter lab examples/cold_start_demo.ipynb
+uv sync --extra examples
+uv run jupyter lab examples/demo.ipynb
 ```
 
 ---
@@ -619,6 +635,8 @@ If you see an error like `error: Microsoft Visual C++ 14.0 or greater is require
 Before performing complex operations, use `health_check()` to verify connectivity and credentials:
 
 ```python
+from driftmind.exceptions import DriftMindApiError, DriftMindError
+
 with DriftMindClient(
     api_key=creds["DRIFTMIND_API_KEY"],
     base_url=creds["DRIFTMIND_API_URL"]
@@ -661,8 +679,9 @@ DriftMindError: forecaster_id cannot be empty or whitespace
 
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
 - **[docs/API.md](docs/API.md)** - Complete API reference with input/output formats
+- **[docs/API_NATIVE.md](docs/API_NATIVE.md)** - API reference for camelCase (native format) mode
 - **[examples/quickstart.py](examples/quickstart.py)** - Runnable Python example
-- **[examples/cold_start_demo.ipynb](examples/cold_start_demo.ipynb)** - Interactive Jupyter notebook
+- **[examples/demo.ipynb](examples/demo.ipynb)** - Interactive Jupyter notebook
 - **[tests/TESTING.md](tests/TESTING.md)** - Testing documentation
 
 ---

@@ -45,6 +45,8 @@ Initialize the client with API credentials.
 | `enable_logging_protection` | bool    | No       | Redact API keys from logs (default: True)            |
 | `pool_connections`          | int     | No       | Number of connection pools to cache (default: 10)    |
 | `pool_maxsize`              | int     | No       | Maximum connections to save in pool (default: 10)    |
+| `accept_java_date_format`   | bool    | No       | Accept Java SimpleDateFormat patterns (default: False)|
+| `use_api_native_format`     | bool    | No       | Use camelCase keys for input/output (default: False)  |
 
 **Example:**
 
@@ -75,6 +77,8 @@ try:
 finally:
     client.close()
 ```
+
+> **Note:** This reference documents the default Pythonic interface (`snake_case` keys). If you need `camelCase` keys for backwards compatibility with pre-v0.3 clients, see [API_NATIVE.md](API_NATIVE.md).
 
 ---
 
@@ -743,5 +747,5 @@ with DriftMindClient(
 
 - [README.md](../README.md) - Getting started guide
 - [examples/quickstart.py](../examples/quickstart.py) - Runnable example
-- [examples/cold_start_demo.ipynb](../examples/cold_start_demo.ipynb) - Interactive demo
+- [examples/demo.ipynb](../examples/demo.ipynb) - Interactive demo
 - [tests/TESTING.md](../tests/TESTING.md) - Testing documentation

@@ -115,6 +115,7 @@ class DriftMindClient:
         pool_connections: int = DEFAULT_POOL_CONNECTIONS,
         pool_maxsize: int = DEFAULT_POOL_MAXSIZE,
         accept_java_date_format: bool = False,
+        use_api_native_format: bool = False,
     ) -> None:
         """Initialize the DriftMindClient.
 
@@ -129,6 +130,11 @@ class DriftMindClient:
             enable_logging_protection: If True, installs a filter to redact API keys from logs.
             pool_connections: Number of connection pools to cache (per host).
             pool_maxsize: Maximum number of connections to save in the pool.
+            accept_java_date_format: If True, date format strings are kept in Java
+                style (e.g. ``dd-MM-yyyy``) instead of being converted to Python
+                strftime format.
+            use_api_native_format: If True, return dictionaries with camelCase keys
+                matching the raw API format, instead of converting to snake_case.
 
         """
         self.api_key = api_key.strip()
@@ -141,6 +147,7 @@ class DriftMindClient:
         self._max_retries = max_retries
         self._retry_delay = retry_delay
         self.accept_java_date_format = accept_java_date_format
+        self.use_api_native_format = use_api_native_format
 
         # Configure session with connection pooling
         if session is None:
@@ -167,6 +174,7 @@ class DriftMindClient:
         return {
             "target": target,
             "accept_java_date_format": self.accept_java_date_format,
+            "use_api_native_format": self.use_api_native_format,
         }
 
     def _headers(self) -> dict[str, str]:
@@ -355,6 +363,11 @@ class DriftMindClient:
             exclude_none=True,
             context=self._get_context(target="api"),
         )
+        # Fix API-specific misspelling: the API expects "timeStampIntervalInSeconds"
+        if "timestampIntervalInSeconds" in api_payload:
+            api_payload["timeStampIntervalInSeconds"] = api_payload.pop(
+                "timestampIntervalInSeconds"
+            )
         resp = self._request("POST", path, json=api_payload)
 
         data = self._parse_and_check(resp, error_class=ForecasterCreationError)
@@ -369,7 +382,7 @@ class DriftMindClient:
             # gets the format they expect (Python or Java) in the return dict.
             validated_data = forecaster_creation_response.model_dump(
                 mode="json",
-                by_alias=False,
+                by_alias=self.use_api_native_format,
                 exclude_none=True,
                 context=self._get_context(),
             )
@@ -381,7 +394,8 @@ class DriftMindClient:
         # 4. Forecaster ID Extraction
         location = resp.headers.get("Location")
         header_id = location.rstrip("/").split("/")[-1] if location else None
-        final_id = header_id or validated_data.get("forecaster_id")
+        id_key = "forecasterId" if self.use_api_native_format else "forecaster_id"
+        final_id = header_id or validated_data.get(id_key)
 
         if not final_id:
             raise DriftMindApiError(
@@ -389,7 +403,7 @@ class DriftMindClient:
             )
 
         # 5. Success State
-        validated_data["forecaster_id"] = final_id
+        validated_data[id_key] = final_id
 
         return validated_data
 
@@ -423,7 +437,7 @@ class DriftMindClient:
             # 2. Dump: Context ensures the serializer respects the user's date format preference
             validated_data = forecaster_details_response.model_dump(
                 mode="json",
-                by_alias=False,
+                by_alias=self.use_api_native_format,
                 exclude_none=True,
                 context=self._get_context(),
             )
@@ -565,7 +579,7 @@ class DriftMindClient:
             # 2. Dump: Ensure serialized output respects accept_java_date_format
             validated_data = forecast_response.model_dump(
                 mode="json",
-                by_alias=False,
+                by_alias=self.use_api_native_format,
                 exclude_none=True,
                 context=self._get_context(),  # Crucial for serializer consistency
             )
@@ -595,7 +609,7 @@ class DriftMindClient:
             objects = DriftMindObjectInformationList.model_validate(data)
             validated_data = objects.model_dump(
                 mode="json",
-                by_alias=False,
+                by_alias=self.use_api_native_format,
                 exclude_none=True,
             )
         except ValidationError as err:
@@ -656,7 +670,9 @@ class DriftMindClient:
 
         try:
             deletion_response = ForecasterDeletionResponse.model_validate(data)
-            validated_data = deletion_response.model_dump()
+            validated_data = deletion_response.model_dump(
+                by_alias=self.use_api_native_format
+            )
         except ValidationError as err:
             raise DriftMindApiError(
                 resp.status_code, "Malformed API response", details=[str(err)]
@@ -691,7 +707,8 @@ class DriftMindClient:
 
         # list_forecasters returns a list directly (RootModel)
         forecasters = forecasters_data if isinstance(forecasters_data, list) else []
-        forecaster_ids = [f["object_id"] for f in forecasters]
+        id_key = "objectId" if self.use_api_native_format else "object_id"
+        forecaster_ids = [f[id_key] for f in forecasters]
 
         if not forecaster_ids:
             return {"results": []}
@@ -741,7 +758,7 @@ class DriftMindClient:
         # 3. Validate and return
         try:
             bulk_response = BulkOperationResponse(results=results)
-            return bulk_response.model_dump(by_alias=False)
+            return bulk_response.model_dump(by_alias=self.use_api_native_format)
         except ValidationError as err:
             # This should not happen, but handle it just in case
             raise DriftMindError(
@@ -854,7 +871,7 @@ class DriftMindClient:
         # 6. Validate and structure the response
         try:
             bulk_response = BulkOperationResponse(results=results)
-            return bulk_response.model_dump(by_alias=False)
+            return bulk_response.model_dump(by_alias=self.use_api_native_format)
         except ValidationError as err:
             raise DriftMindApiError(
                 status, "Malformed API response", details=[str(err)]

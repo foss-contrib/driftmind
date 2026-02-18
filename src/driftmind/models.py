@@ -136,7 +136,11 @@ class ForecasterSettingsBase(BaseModel):
             "Time interval (in seconds) between consecutive data points. "
             "Used to validate time-based assumptions."
         ),
-        alias="timeStampIntervalInSeconds",
+        validation_alias=AliasChoices(
+            "timeStampIntervalInSeconds",  # API's misspelling
+            "timestampIntervalInSeconds",  # correct camelCase
+            "timestamp_interval_in_seconds",  # snake_case
+        ),
         examples=[86400],
         ge=1,
     )

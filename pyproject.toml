@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "driftmind"
-version = "0.4.2"
+version = "0.5.0"
 description = "Python client and demo utilities for DriftMind forecasting API"
 authors = [
     { name = "Thingbook.io", email = "roman.f@thingbook.io" }
@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Operating System :: OS Independent",
@@ -51,6 +52,7 @@ dev = [
 [project.optional-dependencies]
 examples = [
     "jupyterlab>=4.3.8",
+    "plotly>=5.0.0",
 ]
 all = [
     "driftmind[examples]"
@@ -76,16 +78,16 @@ target-version = "py39"
 select = ["E", "W", "F", "I", "B", "UP", "PYI", "TID"]
 ignore = ["E501"]
 
-[tool.ruff.lint.isort]
-known-first-party = ["driftmind"]
-combine-as-imports = true
-
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["driftmind"]
+combine-as-imports = true
 
 [tool.ruff.lint.flake8-tidy-imports]
 # Disallow all relative imports from parent modules
@@ -94,9 +96,25 @@ ban-relative-imports = "parents"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "--strict-markers"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 markers = [
     "integration: marks tests as integration tests (run against real API)",
+]
+addopts = [
+    "--cov=driftmind",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--strict-markers",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/driftmind/__init__.py",
+    "src/driftmind/exceptions.py",
+    "src/driftmind/utils/generator.py",
 ]
 
 [tool.uv]

@@ -22,11 +22,8 @@ The DriftMind client uses **pytest** with the **responses** library to mock HTTP
 ## Running Tests
 
 ```bash
-# All tests (use python -m pytest for src layout)
+# All tests (coverage is enabled by default via pyproject.toml)
 uv run python -m pytest tests/
-
-# With coverage
-uv run python -m pytest tests/ --cov=driftmind --cov-report=term-missing
 
 # Verbose output
 uv run python -m pytest tests/ -v
@@ -43,9 +40,25 @@ uv run python -m pytest tests/test_client.py::TestClientValidation::test_rejects
 
 ---
 
+## Coverage
+
+Coverage is collected automatically on every test run (configured in `pyproject.toml` via `--cov=driftmind`). Reports are printed to the terminal and written as HTML to `htmlcov/`. No minimum threshold is enforced.
+
+| Module | Coverage |
+|---|---|
+| `client.py` | 81% |
+| `constants.py` | 93% |
+| `models.py` | 94% |
+| `utils/helpers.py` | 96% |
+| **Total** | **88%** |
+
+Excluded from coverage: `__init__.py` (re-exports only), `exceptions.py` (simple hierarchy), `utils/generator.py` (plotting utilities for examples).
+
+---
+
 ## Test Distribution
 
-### test_client.py (29 tests)
+### test_client.py (37 tests)
 
 **TestClientValidation (9 tests)** - Client-side validation without API calls:
 - `test_rejects_invalid_forecaster_id` (3 parametrized: empty, whitespace, None)
@@ -87,6 +100,16 @@ uv run python -m pytest tests/test_client.py::TestClientValidation::test_rejects
 
 **TestJavaDateFormatClient (1 test)** - `accept_java_date_format` end-to-end:
 - `test_create_with_java_date_format` (201, Java date pattern passthrough)
+
+**TestNativeFormatClient (8 tests)** - `use_api_native_format` end-to-end (camelCase I/O):
+- `test_create_with_camel_case_input` (201, camelCase input and output)
+- `test_create_with_full_spec_native_input` (201, full spec + Java dates + camelCase)
+- `test_get_details_returns_camel_case` (200)
+- `test_forecast_returns_camel_case` (200)
+- `test_list_forecasters_returns_camel_case` (200)
+- `test_delete_returns_camel_case` (200)
+- `test_bulk_feed_with_camel_case_input` (200)
+- `test_delete_all_with_native_format` (list + delete chain)
 
 **TestBulkOperations (3 tests)** - Multi-forecaster operations:
 - `test_bulk_feed_data_all_success` (200)
@@ -146,6 +169,7 @@ uv run python -m pytest tests/test_client.py::TestClientValidation::test_rejects
 - `root_url` - API root (`"https://api.thingbook.io/access/api"`)
 - `base_url` - Full versioned URL (`root_url + "/driftmind/v1"`)
 - `client` - Fresh `DriftMindClient` instance per test
+- `native_client` - `DriftMindClient` with `use_api_native_format=True` for camelCase I/O tests
 
 **OpenAPI / Contract fixtures (session-scoped):**
 - `spec_dict` - Raw OpenAPI dictionary loaded from `driftmind.data/openapi.yaml`
@@ -168,8 +192,11 @@ tests/fixtures/
     ├── feed_data_single_point.json
     ├── feed_data_wrong_features.json
     ├── full_spec_input.json
-    ├── full_spec_input_java.json
-    └── minimal_spec_input.json
+    ├── full_spec_input_dateformat_java.json
+    ├── minimal_spec_input.json
+    ├── create_forecaster_minimal_native.json
+    ├── full_spec_input_native.json
+    └── bulk_feed_data_multiple_native.json
 ```
 
 ---

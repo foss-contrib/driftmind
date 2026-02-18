@@ -16,6 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-02-17
+
+### Added
+- `use_api_native_format` option on `DriftMindClient`: when enabled, the client accepts camelCase input dictionaries and returns camelCase output keys, matching the raw API format. Provides backwards compatibility for users migrating from pre-v0.3 clients. The existing `accept_java_date_format` option remains independent.
+- GitHub Actions workflow for automated PyPI publishing on version tags (`publish.yml`) with Trusted Publishing and tag-version verification.
+- Native format test suite (`TestNativeFormatClient`) with camelCase input fixtures covering all endpoints.
+
+### Fixed
+- Corrected `timeStampIntervalInSeconds` API misspelling: users now see `timestampIntervalInSeconds` (camelCase) or `timestamp_interval_in_seconds` (snake_case). The client handles the API's misspelling transparently.
+- Added missing `plotly` to `examples` optional dependency.
+- Fixed notebook install instructions in README to use `uv sync --extra examples`.
+
+### Changed
+- Updated CI test workflow: upgraded `astral-sh/setup-uv` from v4 to v5, pinned Python 3.9, consolidated lint and format into a single step, simplified test command.
+- Added Python 3.13 classifier to `pyproject.toml`.
+- Pytest config: coverage runs by default (`--cov=driftmind`), added explicit test discovery patterns, switched `addopts` to list format.
+- Added `[tool.coverage.run]` configuration with `source = ["src"]` and excluded non-essential modules (`__init__.py`, `exceptions.py`, `utils/generator.py`) from coverage reporting.
+
+---
+
 ## [0.4.2] - 2026-02-17
 
 ### Added

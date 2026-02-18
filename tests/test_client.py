@@ -712,6 +712,280 @@ class TestJavaDateFormatClient:
         assert "forecaster_id" in result
 
 
+class TestNativeFormatClient:
+    """Test use_api_native_format=True: camelCase inputs accepted and camelCase outputs returned."""
+
+    FORECASTERS_PATH = "/driftmind/v1/forecasters"
+    FORECASTER_PATH = "/driftmind/v1/forecasters/{forecasterId}"
+    OBSERVATIONS_PATH = "/driftmind/v1/forecasters/{forecasterId}/observations"
+    PREDICTIONS_PATH = "/driftmind/v1/forecasters/{forecasterId}/predictions"
+    BULK_FEED_PATH = "/driftmind/v1/forecasters/observations"
+
+    @responses.activate
+    def test_create_with_camel_case_input(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+        validate_contract: Any,
+    ) -> None:
+        """Native client should accept camelCase input and return camelCase output."""
+        request_payload = load_json_fixture("create_forecaster_minimal_native.json")
+
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.FORECASTERS_PATH, "POST", 201)
+        )
+        mock_response["forecasterName"] = request_payload["forecasterName"]
+        mock_response["features"] = request_payload["features"]
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters",
+            json=mock_response,
+            status=201,
+            content_type="application/json",
+        )
+
+        result = native_client.create_forecaster(request_payload)
+
+        # Output keys should be camelCase
+        assert "forecasterId" in result
+        assert "forecasterName" in result
+        assert result["forecasterName"] == request_payload["forecasterName"]
+        assert set(result["features"]) == set(request_payload["features"])
+
+        validate_contract(responses.calls[0], path_pattern=self.FORECASTERS_PATH)
+
+    @responses.activate
+    def test_create_with_full_spec_native_input(
+        self,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+    ) -> None:
+        """Native client with accept_java_date_format should accept full camelCase + Java dates."""
+        native_java_client = DriftMindClient(
+            "test-key",
+            base_url,
+            use_api_native_format=True,
+            accept_java_date_format=True,
+        )
+        request_payload = load_json_fixture("full_spec_input_native.json")
+
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.FORECASTERS_PATH, "POST", 201)
+        )
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters",
+            json=mock_response,
+            status=201,
+            content_type="application/json",
+        )
+
+        result = native_java_client.create_forecaster(request_payload)
+
+        assert "forecasterId" in result
+        assert "configuration" in result
+
+    @responses.activate
+    def test_get_details_returns_camel_case(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        validate_contract: Any,
+    ) -> None:
+        """get_forecaster_details should return camelCase keys in native mode."""
+        forecaster_id = "test-id"
+
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.FORECASTER_PATH, "GET", 200)
+        )
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters/{forecaster_id}",
+            json=mock_response,
+            status=200,
+            content_type="application/json",
+        )
+
+        result = native_client.get_forecaster_details(forecaster_id)
+
+        assert "forecasterId" in result
+        assert "forecasterName" in result
+        assert "configuration" in result
+
+        validate_contract(responses.calls[0], path_pattern=self.FORECASTER_PATH)
+
+    @responses.activate
+    def test_forecast_returns_camel_case(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        validate_contract: Any,
+    ) -> None:
+        """forecast should return camelCase keys in native mode."""
+        forecaster_id = "test-id"
+
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.PREDICTIONS_PATH, "GET", 200)
+        )
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters/{forecaster_id}/predictions",
+            json=mock_response,
+            status=200,
+            content_type="application/json",
+        )
+
+        result = native_client.forecast(forecaster_id)
+
+        assert "anomalyScore" in result
+        assert "numberOfClusters" in result
+        assert "features" in result
+        for feature_data in result["features"].values():
+            assert "upperConfidence" in feature_data
+            assert "lowerConfidence" in feature_data
+            assert "forecastingMethod" in feature_data
+
+        validate_contract(responses.calls[0], path_pattern=self.PREDICTIONS_PATH)
+
+    @responses.activate
+    def test_list_forecasters_returns_camel_case(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        validate_contract: Any,
+    ) -> None:
+        """list_forecasters should return camelCase keys in native mode."""
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.FORECASTERS_PATH, "GET", 200)
+        )
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json=mock_response,
+            status=200,
+            content_type="application/json",
+        )
+
+        result = native_client.list_forecasters()
+
+        assert isinstance(result, list)
+        for item in result:
+            assert "objectId" in item
+            assert "objectName" in item
+            assert "createdAt" in item
+            assert "objectType" in item
+
+        validate_contract(responses.calls[0], path_pattern=self.FORECASTERS_PATH)
+
+    @responses.activate
+    def test_delete_returns_camel_case(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        validate_contract: Any,
+    ) -> None:
+        """delete_forecaster should return camelCase keys in native mode."""
+        forecaster_id = "test-id"
+
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.FORECASTER_PATH, "DELETE", 200)
+        )
+
+        responses.add(
+            responses.DELETE,
+            f"{base_url}/forecasters/{forecaster_id}",
+            json=mock_response,
+            status=200,
+            content_type="application/json",
+        )
+
+        result = native_client.delete_forecaster(forecaster_id)
+
+        assert "message" in result
+        validate_contract(responses.calls[0], path_pattern=self.FORECASTER_PATH)
+
+    @responses.activate
+    def test_bulk_feed_with_camel_case_input(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+        validate_contract: Any,
+    ) -> None:
+        """bulk_feed_data should accept camelCase input and return camelCase output."""
+        request_payload = load_json_fixture("bulk_feed_data_multiple_native.json")
+
+        mock_response = copy.deepcopy(
+            get_openapi_response_example(self.BULK_FEED_PATH, "PATCH", 200)
+        )
+
+        responses.add(
+            responses.PATCH,
+            f"{base_url}/forecasters/observations",
+            json=mock_response,
+            status=200,
+            content_type="application/json",
+        )
+
+        result = native_client.bulk_feed_data(request_payload)
+
+        assert "results" in result
+        for r in result["results"]:
+            assert "forecasterId" in r
+
+        validate_contract(responses.calls[0], path_pattern=self.BULK_FEED_PATH)
+
+    @responses.activate
+    def test_delete_all_with_native_format(
+        self,
+        native_client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+    ) -> None:
+        """delete_all_forecasters should work with camelCase keys throughout."""
+        list_example = copy.deepcopy(
+            get_openapi_response_example(self.FORECASTERS_PATH, "GET", 200)
+        )
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json=list_example,
+            status=200,
+            content_type="application/json",
+        )
+
+        for forecaster in list_example:
+            fc_id = forecaster.get("objectId") or forecaster.get("forecasterId")
+            responses.add(
+                responses.DELETE,
+                f"{base_url}/forecasters/{fc_id}",
+                json={"message": "FORECASTER_DELETED"},
+                status=200,
+                content_type="application/json",
+            )
+
+        result = native_client.delete_all_forecasters()
+
+        assert "results" in result
+        assert len(result["results"]) == len(list_example)
+        for r in result["results"]:
+            assert "forecasterId" in r
+
+
 class TestBulkOperations:
     """Test bulk feed and delete operations with multi-call validation."""
 

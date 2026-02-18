@@ -1,0 +1,14 @@
+{
+  "forecasterName": "Machine Health Forecaster",
+  "features": ["vibration_g", "motor_temp_c", "power_kw"],
+  "inputSize": 30,
+  "outputSize": 1,
+  "maxClustersAllowed": 50,
+  "similarityThreshold": 0.8,
+  "timestampIntervalInSeconds": 30,
+  "fitRate": 1,
+  "useCustomDateFormat": true,
+  "dateFormat": "dd-MM-yyyy HH:mm",
+  "useInitializationDate": true,
+  "initializationDate": "01-01-2025 00:00"
+}

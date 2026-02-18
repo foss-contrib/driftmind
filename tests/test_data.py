@@ -141,7 +141,7 @@ class TestJavaDateFormatOption:
 
     def test_spec_accepts_java_date_format(self, load_json_fixture: Any):
         """Java pattern should be accepted when context flag is set."""
-        data = load_json_fixture("full_spec_input_java.json")
+        data = load_json_fixture("full_spec_input_dateformat_java.json")
         spec = ForecasterSpec.model_validate(data, context=self.JAVA_CONTEXT)
         assert spec.date_format == self.JAVA_FMT
 
@@ -153,7 +153,7 @@ class TestJavaDateFormatOption:
 
     def test_spec_serialization_passthrough_java(self, load_json_fixture: Any):
         """With flag set, serialization for API should pass Java format through."""
-        data = load_json_fixture("full_spec_input_java.json")
+        data = load_json_fixture("full_spec_input_dateformat_java.json")
         spec = ForecasterSpec.model_validate(data, context=self.JAVA_CONTEXT)
         payload = spec.model_dump(
             mode="json",
