@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.0] - 2026-02-17
+## [0.5.0] - 2026-02-19
 
 ### Added
 - `use_api_native_format` option on `DriftMindClient`: when enabled, the client accepts camelCase input dictionaries and returns camelCase output keys, matching the raw API format. Provides backwards compatibility for users migrating from pre-v0.3 clients. The existing `accept_java_date_format` option remains independent.
