@@ -207,7 +207,7 @@ def plot_time_series(
     except ImportError as exc:
         raise ImportError(f"matplotlib is required. {_INSTALL_HINT}") from exc
 
-    if not timestamps or not values:
+    if len(timestamps) == 0 or len(values) == 0:
         return
 
     plt.figure(figsize=(15, 3))

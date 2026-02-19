@@ -34,6 +34,7 @@ These resources detail the **single-pass clustering mechanism** and **temporal t
 
 ## 🎯 The DriftMind Client
 
+[![PyPI version](https://img.shields.io/pypi/v/driftmind)](https://pypi.org/project/driftmind/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/thngbk/driftmind/actions/workflows/test.yml/badge.svg)](https://github.com/thngbk/driftmind/actions/workflows/test.yml)
@@ -60,7 +61,8 @@ The **DriftMind Client** is a lightweight Python package that encapsulates the [
 
 ### 1. System Requirements
 - **Python**: 3.9 or higher.
-- **Windows Users**: You must have the **Visual Studio Build Tools** installed to compile dependencies like `numpy`. 
+- **[uv](https://docs.astral.sh/uv/)** (recommended): Fast Python package manager. Handles virtual environments automatically.
+- **Windows Users**: Installing the `[examples]` extra requires the **Visual Studio Build Tools** to compile `numpy`.
     - [Download here](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select the **"Desktop development with C++"** workload.
 
 ### 2. Backend Access
@@ -70,33 +72,37 @@ You will need:
 
 These should be stored in a `.env` file (see [Configuration](#-configuration)).
 
-### 3. Quick Start Installation
+### 3. Install from PyPI
 
-We recommend using [uv](https://docs.astral.sh/uv/) for the fastest and most reliable setup. It automatically handles the virtual environment and lockfile synchronization.
+```bash
+# Core library (lightweight — no numpy/pandas/matplotlib)
+uv pip install driftmind
+
+# With examples extras (adds numpy, pandas, matplotlib, JupyterLab, Plotly)
+uv pip install driftmind[examples]
+```
+
+### 4. For Development & Contributing
 
 ```bash
 # Clone the repository
 git clone https://github.com/thngbk/driftmind.git
 cd driftmind
 
-# Synchronize the environment (creates .venv and installs everything)
-uv sync
-```
-
-**For development (editable mode with all tools):**
-
-```bash
-# For development (includes testing tools, linter, and examples):
+# Sync environment (editable install with dev tools and examples)
 uv sync --dev --extra examples
+
+# Install pre-commit hooks
+uv run pre-commit install
 ```
 
 ---
 
 ## ⚠️ Migration from 0.2.x (Breaking Changes)
 
-Version **0.4.0** introduced a major change to provide a more idiomatic Python experience: **API response keys are now automatically converted from `camelCase` to `snake_case`.**
+Version **0.3.0** introduced a major change to provide a more idiomatic Python experience: **API response keys are now automatically converted from `camelCase` to `snake_case`.**
 
-| Old Behavior (v0.2.0)         | New Behavior (v0.4.0+)         |
+| Old Behavior (v0.2.0)         | New Behavior (v0.3.0+)         |
 | ----------------------------- | ------------------------------ |
 | `result["anomalyScore"]`      | `result["anomaly_score"]`      |
 | `result["forecastingMethod"]` | `result["forecasting_method"]` |
@@ -275,7 +281,7 @@ with DriftMindClient(
 | `pool_connections`          | int     | No       | 10      | Number of connection pools to cache per host                                          |
 | `pool_maxsize`              | int     | No       | 10      | Maximum number of connections to save in the pool                                     |
 | `accept_java_date_format`   | bool    | No       | False   | Accept Java SimpleDateFormat patterns instead of Python strftime                      |
-| `use_api_native_format`     | bool    | No       | False   | Accept and return camelCase keys matching the raw API format (pre-v0.3 compatibility) |
+| `use_api_native_format`     | bool    | No       | False   | Accept and return camelCase keys matching the raw API format (pre-v0.2 compatibility) |
 
 ---
 
@@ -574,8 +580,13 @@ Run it with: `uv run python examples/quickstart.py`
 - Visualization of actual vs predicted values
 - Anomaly score and cluster evolution plots
 
-To run the notebook, install the examples dependencies (JupyterLab, Plotly, NumPy, Pandas, and Matplotlib):
+To run the notebook:
 ```bash
+# If installed from PyPI:
+uv pip install driftmind[examples]
+jupyter lab examples/demo.ipynb
+
+# If working from a cloned repo:
 uv sync --extra examples
 uv run jupyter lab examples/demo.ipynb
 ```
@@ -588,13 +599,13 @@ uv run jupyter lab examples/demo.ipynb
 
 ### 🪟 Windows: C++ Build Tools Missing
 
-If you see an error like `error: Microsoft Visual C++ 14.0 or greater is required` during installation, it means the `numpy` build failed because your system lacks a C++ compiler.
+If you see an error like `error: Microsoft Visual C++ 14.0 or greater is required` when installing the `[examples]` extra, it means the `numpy` build failed because your system lacks a C++ compiler.
 
 **The Fix:**
 
 1. Download the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 2. Run the installer and select **"Desktop development with C++"**.
-3. Restart your terminal and run `uv sync` again.
+3. Restart your terminal and retry the install (e.g., `uv pip install driftmind[examples]`).
 
 ### 🔍 Verifying API Connectivity
 
