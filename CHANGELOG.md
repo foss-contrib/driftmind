@@ -103,7 +103,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Bulk operations field handling (`results` vs `details`)
 - Import paths after utils refactoring
-- Notebook imports to use public API## [0.3.0] - 2026-02-01
+- Notebook imports to use public API
+
+## [0.3.0] - 2026-02-01
 
 ### Changed
 - Implemented snake_case to camelCase translation for all client inputs and outputs.
