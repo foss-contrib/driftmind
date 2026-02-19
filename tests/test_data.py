@@ -1,3 +1,26 @@
+"""
+Pydantic model validation and serialization tests.
+
+Exercises the models in ``driftmind.models`` *without* making HTTP calls,
+verifying camelCase↔snake_case conversion, date-format handling, cross-field
+validation, and schema rejection of invalid data.
+
+* **TestForecasterCreationSchema** -- ``ForecasterSpec`` serialization (minimal
+  and full), ``ForecasterCreationResponse`` parsing/coercion, required-field
+  validation, ``ApiErrorResponse`` parsing, output_size vs input_size constraint.
+* **TestJavaDateFormatOption** -- ``accept_java_date_format`` context flag on
+  ``ForecasterSpec`` and ``ForecasterConfig`` (accept, passthrough, convert).
+* **TestForecasterSpecExtended** -- Blank features, ``use_custom_date_format``
+  without ``date_format``, ``use_initialization_date`` without date,
+  ``similarity_threshold`` out of range.
+* **TestDataFeedPayloadSchema** -- ``DataFeedPayload`` empty dict, empty lists,
+  inconsistent lengths.
+* **TestFeaturePredictionSchema** -- ``FeaturePrediction`` array-length mismatch.
+* **TestForecasterDeletionResponseSchema** -- ``ForecasterDeletionResponse``
+  valid, unexpected message (Literal), extra fields (forbid).
+* **TestBulkDataFeedPayloadSchema** -- ``BulkDataFeedPayload`` empty list.
+"""
+
 from typing import Any
 
 import pytest
@@ -5,8 +28,12 @@ from pydantic import ValidationError
 
 from driftmind.models import (
     ApiErrorResponse,
+    BulkDataFeedPayload,
+    DataFeedPayload,
+    FeaturePrediction,
     ForecasterConfig,
     ForecasterCreationResponse,
+    ForecasterDeletionResponse,
     ForecasterSpec,
 )
 
@@ -24,7 +51,9 @@ class TestForecasterCreationSchema:
     @pytest.mark.parametrize(
         "fixture_file", ["minimal_spec_input.json", "full_spec_input.json"]
     )
-    def test_request_serialization_mapping(self, fixture_file: str, load_json_fixture: Any):
+    def test_request_serialization_mapping(
+        self, fixture_file: str, load_json_fixture: Any
+    ):
         """
         Tests that Python objects (minimal or full) convert correctly
         to API-ready camelCase JSON with Java date formats.
@@ -202,3 +231,129 @@ class TestJavaDateFormatOption:
             },
         )
         assert config.date_format == self.PYTHON_FMT
+
+
+class TestForecasterSpecExtended:
+    """Extended validation tests for ForecasterSpec."""
+
+    def test_blank_feature_name_rejected(self):
+        """Feature names that are blank strings should be rejected."""
+        with pytest.raises(ValidationError, match="blank"):
+            ForecasterSpec(
+                forecaster_name="Test",
+                features=["valid", "  "],
+                input_size=10,
+                output_size=3,
+            )
+
+    def test_date_format_required_when_custom_flag_set(self):
+        """Setting use_custom_date_format=True without date_format should fail."""
+        with pytest.raises(ValidationError, match="date_format must be provided"):
+            ForecasterSpec(
+                forecaster_name="Test",
+                features=["x"],
+                input_size=10,
+                output_size=3,
+                use_custom_date_format=True,
+            )
+
+    def test_initialization_date_required_when_flag_set(self):
+        """Setting use_initialization_date=True without initialization_date should fail."""
+        with pytest.raises(
+            ValidationError, match="initialization_date must be provided"
+        ):
+            ForecasterSpec(
+                forecaster_name="Test",
+                features=["x"],
+                input_size=10,
+                output_size=3,
+                use_initialization_date=True,
+            )
+
+    def test_similarity_threshold_out_of_range(self):
+        """similarity_threshold below 0.6 or above 1.0 should be rejected."""
+        with pytest.raises(ValidationError):
+            ForecasterSpec(
+                forecaster_name="Test",
+                features=["x"],
+                input_size=10,
+                output_size=3,
+                similarity_threshold=0.5,
+            )
+
+        with pytest.raises(ValidationError):
+            ForecasterSpec(
+                forecaster_name="Test",
+                features=["x"],
+                input_size=10,
+                output_size=3,
+                similarity_threshold=1.1,
+            )
+
+
+class TestDataFeedPayloadSchema:
+    """Tests for DataFeedPayload model validation."""
+
+    def test_empty_dict_rejected(self):
+        """Empty dictionary should be rejected."""
+        with pytest.raises(ValidationError, match="empty"):
+            DataFeedPayload.model_validate({})
+
+    def test_empty_lists_rejected(self):
+        """Empty value lists should be rejected."""
+        with pytest.raises(ValidationError, match="empty"):
+            DataFeedPayload.model_validate({"x": []})
+
+    def test_inconsistent_lengths_rejected(self):
+        """Lists with different lengths should be rejected."""
+        with pytest.raises(ValidationError, match="Inconsistent"):
+            DataFeedPayload.model_validate({"x": [1.0, 2.0], "y": [3.0]})
+
+
+class TestFeaturePredictionSchema:
+    """Tests for FeaturePrediction model validation."""
+
+    def test_array_length_mismatch_rejected(self):
+        """Prediction arrays that don't match timestamps length should fail."""
+        with pytest.raises(ValidationError, match="predictions.*must match"):
+            FeaturePrediction(
+                timestamps=["2025-01-01", "2025-01-02", "2025-01-03"],
+                predictions=[1.0, 2.0],  # Length mismatch
+                upper_confidence=[1.1, 2.1, 3.1],
+                lower_confidence=[0.9, 1.9, 2.9],
+                anomaly_score=0.5,
+                forecasting_method="ARIMA",
+                number_of_clusters=3,
+            )
+
+
+class TestForecasterDeletionResponseSchema:
+    """Tests for ForecasterDeletionResponse model validation."""
+
+    def test_valid_deletion_response(self):
+        """Valid deletion response should parse correctly."""
+        resp = ForecasterDeletionResponse.model_validate(
+            {"message": "FORECASTER_DELETED"}
+        )
+        assert resp.message == "FORECASTER_DELETED"
+
+    def test_unexpected_message_rejected(self):
+        """Unexpected message values should be rejected (Literal type)."""
+        with pytest.raises(ValidationError):
+            ForecasterDeletionResponse.model_validate({"message": "SOMETHING_ELSE"})
+
+    def test_extra_fields_rejected(self):
+        """Extra fields should be rejected (extra='forbid')."""
+        with pytest.raises(ValidationError):
+            ForecasterDeletionResponse.model_validate(
+                {"message": "FORECASTER_DELETED", "extra_field": "value"}
+            )
+
+
+class TestBulkDataFeedPayloadSchema:
+    """Tests for BulkDataFeedPayload model validation."""
+
+    def test_empty_payloads_list_rejected(self):
+        """Empty payloads_list should be rejected (min_length=1)."""
+        with pytest.raises(ValidationError):
+            BulkDataFeedPayload.model_validate({"payloads_list": []})

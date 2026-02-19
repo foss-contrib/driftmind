@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from typing import Final
+from collections.abc import Sequence
+from typing import Any, Final
 
-import numpy as np
-import pandas as pd
+_INSTALL_HINT = "Install with: pip install driftmind[examples]"
 
 
 def generate_sin_cos_tan_with_drifts(
     n: int = 600,
     noise_std: float = 0.0,
     seed: int = 42,
-) -> pd.DataFrame:
+):
     """Generate a synthetic time series with piecewise sinusoidal drifts.
 
     The sequence is split into three segments, each with different
@@ -32,8 +32,19 @@ def generate_sin_cos_tan_with_drifts(
 
     Raises:
         ValueError: If ``n`` is not positive or ``noise_std`` is negative.
+        ImportError: If numpy or pandas are not installed.
 
     """
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise ImportError(f"numpy is required. {_INSTALL_HINT}") from exc
+
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise ImportError(f"pandas is required. {_INSTALL_HINT}") from exc
+
     if n <= 0:
         raise ValueError(f"n must be positive, got {n}.")
     if noise_std < 0:
@@ -110,3 +121,100 @@ def generate_sin_cos_tan_with_drifts(
         }
     )
     return df
+
+
+def plot_actual_vs_predicted(
+    df,
+    variable_name: str,
+    *,
+    timestamp_col: str = "timestamp",
+    actual_col: str = "expected",
+    predicted_col: str = "predicted",
+) -> None:
+    """Plot actual vs. predicted values over time.
+
+    Args:
+        df: A pandas DataFrame containing timestamp, actual, and predicted
+            columns.
+        variable_name: Label used in the plot title.
+        timestamp_col: Name of the timestamp column in ``df``.
+        actual_col: Name of the column containing actual values.
+        predicted_col: Name of the column containing predicted values.
+
+    Returns:
+        None. The function creates and shows a matplotlib figure.
+
+    Raises:
+        KeyError: If any of the required columns are missing from ``df``.
+        ImportError: If matplotlib is not installed.
+
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ImportError(f"matplotlib is required. {_INSTALL_HINT}") from exc
+
+    if df.empty:
+        # No-op on empty data; not considered an error.
+        return
+
+    for col in (timestamp_col, actual_col, predicted_col):
+        if col not in df.columns:
+            raise KeyError(f"Required column '{col}' not found in DataFrame.")
+
+    plt.figure(figsize=(15, 4))
+    plt.plot(df[timestamp_col], df[actual_col], label="Actual", linewidth=2)
+    plt.plot(
+        df[timestamp_col],
+        df[predicted_col],
+        label="Predicted",
+        linestyle="--",
+    )
+    plt.title(f"{variable_name}: Actual vs Predicted")
+    plt.xlabel("Time")
+    plt.ylabel("Value")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_time_series(
+    timestamps: Sequence[Any],
+    values: Sequence[float],
+    title: str,
+    xlabel: str,
+    ylabel: str,
+) -> None:
+    """Plot a simple time series.
+
+    Args:
+        timestamps: Sequence of timestamp-like values for the x-axis.
+        values: Sequence of numeric values for the y-axis.
+        title: Plot title.
+        xlabel: X-axis label.
+        ylabel: Y-axis label.
+
+    Returns:
+        None. The function creates and shows a matplotlib figure.
+
+    Raises:
+        ImportError: If matplotlib is not installed.
+
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ImportError(f"matplotlib is required. {_INSTALL_HINT}") from exc
+
+    if not timestamps or not values:
+        return
+
+    plt.figure(figsize=(15, 3))
+    plt.plot(timestamps, values, color="red", linewidth=2)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()

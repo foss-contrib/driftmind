@@ -1,10 +1,32 @@
 """
-Comprehensive test suite for DriftMind client using recorded API responses.
+Comprehensive test suite for the DriftMind client HTTP layer.
 
-Tests are organized by:
-1. Client-side validation (no API mocking)
-2. Success cases (2xx responses)
-3. Error cases (4xx/5xx responses)
+Covers every public endpoint on ``DriftMindClient`` using spec-driven mocks
+from the bundled OpenAPI spec and request/response contract validation.
+
+Test classes are organised by endpoint, each containing success (2xx) and
+error (4xx/5xx) scenarios:
+
+* **TestClientValidation** -- Client-side Pydantic validation (no API mocking).
+* **TestCreateForecaster / TestCreateForecasterExtended** -- POST /forecasters
+  (minimal, full-spec, Location header, 400/401 errors, misspelling fix).
+* **TestFeedData / TestFeedDataExtended** -- POST /forecasters/{id}/observations
+  (success, wrong features, 404, feed_data alias).
+* **TestForecast / TestForecastExtended** -- GET /forecasters/{id}/predictions
+  (success, 404, 422).
+* **TestGetForecasterDetails / TestGetForecasterDetailsExtended** -- GET /forecasters/{id}
+  (success, 403, 404).
+* **TestGetForecasterData / TestGetForecasterDataExtended** -- GET /forecasters/{id}/observations
+  (success, empty, 404).
+* **TestDeleteForecaster / TestDeleteForecasterExtended** -- DELETE /forecasters/{id}
+  (success, 401, 404).
+* **TestContextManager** -- Context manager / manual close.
+* **TestJavaDateFormatClient** -- ``accept_java_date_format`` end-to-end.
+* **TestNativeFormatClient** -- ``use_api_native_format`` camelCase I/O.
+* **TestBulkOperations** -- PATCH /forecasters/observations (200, 206, 417, 500),
+  delete_all_forecasters (empty, partial failure).
+* **TestHealthCheck** -- health_check success and error re-raise.
+* **TestListForecasters** -- list_forecasters 401 error and empty list.
 """
 
 import copy
@@ -15,7 +37,13 @@ import pytest
 import responses
 
 from driftmind import DriftMindClient
-from driftmind.exceptions import DriftMindApiError, DriftMindError, ForecastError
+from driftmind.exceptions import (
+    DataFeedError,
+    DriftMindApiError,
+    DriftMindError,
+    ForecasterCreationError,
+    ForecastError,
+)
 
 
 class TestClientValidation:
@@ -1108,3 +1136,513 @@ class TestBulkOperations:
         # Validate the subsequent DELETE calls
         for i in range(1, len(responses.calls)):
             validate_contract(responses.calls[i], path_pattern=self.DELETE_PATH)
+
+    @responses.activate
+    def test_bulk_feed_data_all_failed(
+        self,
+        client: Any,
+        base_url: str,
+        load_json_fixture: Any,
+        validate_contract: Any,
+    ) -> None:
+        """Test bulk feeding where all forecasters fail (417 Expectation Failed)."""
+        request_payload = load_json_fixture("bulk_feed_data_multiple.json")
+
+        mock_response = {
+            "results": [
+                {
+                    "forecasterId": "fc-1",
+                    "status": 404,
+                    "message": "FORECASTER_NOT_FOUND",
+                },
+                {
+                    "forecasterId": "fc-2",
+                    "status": 404,
+                    "message": "FORECASTER_NOT_FOUND",
+                },
+            ]
+        }
+
+        responses.add(
+            responses.PATCH,
+            f"{base_url}/forecasters/observations",
+            json=mock_response,
+            status=417,
+            content_type="application/json",
+        )
+
+        result = client.bulk_feed_data(request_payload)
+
+        assert "results" in result
+        assert all(r["status"] == 404 for r in result["results"])
+        validate_contract(responses.calls[0], path_pattern=self.BULK_FEED_PATH)
+
+    @responses.activate
+    def test_bulk_feed_data_unexpected_error(
+        self,
+        client: Any,
+        base_url: str,
+        load_json_fixture: Any,
+    ) -> None:
+        """Test bulk feeding with unexpected 500 error."""
+        request_payload = load_json_fixture("bulk_feed_data_multiple.json")
+
+        responses.add(
+            responses.PATCH,
+            f"{base_url}/forecasters/observations",
+            json={"error": "INTERNAL_ERROR", "details": ["Server crash"]},
+            status=500,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DataFeedError) as exc:
+            client.bulk_feed_data(request_payload)
+        assert exc.value.status_code == 500
+
+    @responses.activate
+    def test_delete_all_forecasters_empty_list(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test delete_all_forecasters when no forecasters exist."""
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json=[],
+            status=200,
+            content_type="application/json",
+        )
+
+        result = client.delete_all_forecasters()
+
+        assert result == {"results": []}
+        assert len(responses.calls) == 1  # Only the list call
+
+    @responses.activate
+    def test_delete_all_forecasters_partial_failure(
+        self,
+        client: Any,
+        base_url: str,
+        get_openapi_response_example: Any,
+    ) -> None:
+        """Test delete_all_forecasters when some deletions fail."""
+        list_example = copy.deepcopy(
+            get_openapi_response_example(self.LIST_PATH, "GET", 200)
+        )
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json=list_example,
+            status=200,
+            content_type="application/json",
+        )
+
+        # First forecaster succeeds, second fails with 404
+        for i, forecaster in enumerate(list_example):
+            fc_id = forecaster.get("objectId") or forecaster.get("forecasterId")
+            if i == 0:
+                responses.add(
+                    responses.DELETE,
+                    f"{base_url}/forecasters/{fc_id}",
+                    json={"message": "FORECASTER_DELETED"},
+                    status=200,
+                    content_type="application/json",
+                )
+            else:
+                responses.add(
+                    responses.DELETE,
+                    f"{base_url}/forecasters/{fc_id}",
+                    json={"error": "NOT_FOUND", "details": []},
+                    status=404,
+                    content_type="application/json",
+                )
+
+        result = client.delete_all_forecasters()
+
+        assert len(result["results"]) == len(list_example)
+        assert result["results"][0]["status"] == 200
+        # Remaining deletions should have error status
+        for r in result["results"][1:]:
+            assert r["status"] == 404
+
+
+class TestCreateForecasterExtended:
+    """Extended tests for create_forecaster endpoint."""
+
+    SPEC_PATH = "/driftmind/v1/forecasters"
+
+    @responses.activate
+    def test_create_full_spec_success(
+        self,
+        client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+        validate_contract: Any,
+    ) -> None:
+        """Test creating forecaster with all optional fields populated."""
+        request_payload = load_json_fixture("full_spec_input.json")
+
+        mock_response_body = copy.deepcopy(
+            get_openapi_response_example(self.SPEC_PATH, "POST", 201)
+        )
+        mock_response_body["forecasterName"] = request_payload["forecaster_name"]
+        mock_response_body["features"] = request_payload["features"]
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters",
+            json=mock_response_body,
+            status=201,
+            content_type="application/json",
+        )
+
+        result = client.create_forecaster(request_payload)
+
+        assert "forecaster_id" in result
+        assert result["forecaster_name"] == request_payload["forecaster_name"]
+        assert "configuration" in result
+        validate_contract(responses.calls[0], path_pattern=self.SPEC_PATH)
+
+    @responses.activate
+    def test_create_location_header_id_extraction(
+        self,
+        client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+    ) -> None:
+        """Test that forecaster_id is extracted from Location header when present."""
+        request_payload = load_json_fixture("create_forecaster_minimal.json")
+        header_id = "location-header-id-123"
+
+        mock_response_body = copy.deepcopy(
+            get_openapi_response_example(self.SPEC_PATH, "POST", 201)
+        )
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters",
+            json=mock_response_body,
+            status=201,
+            headers={"Location": f"/forecasters/{header_id}"},
+            content_type="application/json",
+        )
+
+        result = client.create_forecaster(request_payload)
+
+        # Location header ID should take precedence
+        assert result["forecaster_id"] == header_id
+
+    @responses.activate
+    def test_create_400_validation_error(
+        self,
+        client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+        validate_contract: Any,
+    ) -> None:
+        """Test creating forecaster with server-side 400 validation error."""
+        request_payload = load_json_fixture("create_forecaster_minimal.json")
+
+        mock_error_body = copy.deepcopy(
+            get_openapi_response_example(
+                self.SPEC_PATH, "POST", 400, "Invalid Window Sizes"
+            )
+        )
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters",
+            json=mock_error_body,
+            status=400,
+            content_type="application/json",
+        )
+
+        with pytest.raises(ForecasterCreationError) as exc:
+            client.create_forecaster(request_payload)
+
+        assert exc.value.status_code == 400
+        assert exc.value.error_code == "VALIDATION_FAILED"
+        validate_contract(responses.calls[0], path_pattern=self.SPEC_PATH)
+
+    @responses.activate
+    def test_create_misspelling_fix_timestamp_interval(
+        self,
+        client: DriftMindClient,
+        base_url: str,
+        get_openapi_response_example: Any,
+        load_json_fixture: Any,
+    ) -> None:
+        """Test that timestampIntervalInSeconds is sent as timeStampIntervalInSeconds to API."""
+        request_payload = load_json_fixture("full_spec_input.json")
+
+        mock_response_body = copy.deepcopy(
+            get_openapi_response_example(self.SPEC_PATH, "POST", 201)
+        )
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters",
+            json=mock_response_body,
+            status=201,
+            content_type="application/json",
+        )
+
+        client.create_forecaster(request_payload)
+
+        # Verify the API received the misspelled key
+        import json
+
+        sent_body = json.loads(responses.calls[0].request.body)
+        assert "timeStampIntervalInSeconds" in sent_body
+        assert "timestampIntervalInSeconds" not in sent_body
+
+
+class TestFeedDataExtended:
+    """Extended tests for feed_point endpoint."""
+
+    SPEC_PATH = "/driftmind/v1/forecasters/{forecasterId}/observations"
+
+    @responses.activate
+    def test_feed_data_404_not_found(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test feeding data to a nonexistent forecaster (404)."""
+        forecaster_id = "nonexistent-id"
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters/{forecaster_id}/observations",
+            json={"error": "NOT_FOUND", "details": []},
+            status=404,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.feed_point(forecaster_id, {"x": [1.0]})
+
+        assert exc.value.status_code == 404
+
+    @responses.activate
+    def test_feed_data_alias_delegates_to_feed_point(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test that feed_data() delegates to feed_point()."""
+        forecaster_id = "test-id"
+
+        responses.add(
+            responses.POST,
+            f"{base_url}/forecasters/{forecaster_id}/observations",
+            json={"message": "FED"},
+            status=200,
+            content_type="application/json",
+        )
+
+        result = client.feed_data(forecaster_id, {"x": [1.0]})
+
+        assert result["message"] == "FED"
+        assert len(responses.calls) == 1
+
+
+class TestForecastExtended:
+    """Extended tests for forecast endpoint."""
+
+    @responses.activate
+    def test_forecast_404_not_found(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test forecast on nonexistent forecaster (404)."""
+        forecaster_id = "nonexistent-id"
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters/{forecaster_id}/predictions",
+            json={"error": "NOT_FOUND", "details": []},
+            status=404,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.forecast(forecaster_id)
+
+        assert exc.value.status_code == 404
+
+
+class TestGetForecasterDetailsExtended:
+    """Extended tests for get_forecaster_details endpoint."""
+
+    @responses.activate
+    def test_get_details_403_forbidden(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test getting details with insufficient permissions (403)."""
+        forecaster_id = "forbidden-id"
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters/{forecaster_id}",
+            json={"error": "FORBIDDEN", "details": []},
+            status=403,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.get_forecaster_details(forecaster_id)
+
+        assert exc.value.status_code == 403
+        assert exc.value.error_code == "FORBIDDEN"
+
+
+class TestGetForecasterDataExtended:
+    """Extended tests for get_forecaster_data endpoint."""
+
+    @responses.activate
+    def test_get_data_404_not_found(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test getting data from nonexistent forecaster (404)."""
+        forecaster_id = "nonexistent-id"
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters/{forecaster_id}/observations",
+            json={"error": "NOT_FOUND", "details": []},
+            status=404,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.get_forecaster_data(forecaster_id)
+
+        assert exc.value.status_code == 404
+
+
+class TestDeleteForecasterExtended:
+    """Extended tests for delete_forecaster endpoint."""
+
+    @responses.activate
+    def test_delete_forecaster_401_auth_error(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test deleting forecaster with invalid auth (401)."""
+        forecaster_id = "test-id"
+
+        responses.add(
+            responses.DELETE,
+            f"{base_url}/forecasters/{forecaster_id}",
+            json={"detail": "Unauthorized"},
+            status=401,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.delete_forecaster(forecaster_id)
+
+        assert exc.value.status_code == 401
+
+
+class TestHealthCheck:
+    """Test health_check endpoint."""
+
+    @responses.activate
+    def test_health_check_success(
+        self,
+        client: Any,
+        base_url: str,
+        get_openapi_response_example: Any,
+    ) -> None:
+        """Test health_check returns True when API is accessible."""
+        mock_response = copy.deepcopy(
+            get_openapi_response_example("/driftmind/v1/forecasters", "GET", 200)
+        )
+
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json=mock_response,
+            status=200,
+            content_type="application/json",
+        )
+
+        assert client.health_check() is True
+
+    @responses.activate
+    def test_health_check_reraises_api_error(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test health_check re-raises DriftMindApiError on failure."""
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json={"detail": "Unauthorized"},
+            status=401,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.health_check()
+
+        assert exc.value.status_code == 401
+
+
+class TestListForecasters:
+    """Test list_forecasters endpoint edge cases."""
+
+    SPEC_PATH = "/driftmind/v1/forecasters"
+
+    @responses.activate
+    def test_list_forecasters_401_auth_error(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test list_forecasters with invalid auth (401)."""
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json={"detail": "Unauthorized"},
+            status=401,
+            content_type="application/json",
+        )
+
+        with pytest.raises(DriftMindApiError) as exc:
+            client.list_forecasters()
+
+        assert exc.value.status_code == 401
+
+    @responses.activate
+    def test_list_forecasters_empty_list(
+        self,
+        client: Any,
+        base_url: str,
+    ) -> None:
+        """Test list_forecasters returns empty list when no forecasters exist."""
+        responses.add(
+            responses.GET,
+            f"{base_url}/forecasters",
+            json=[],
+            status=200,
+            content_type="application/json",
+        )
+
+        result = client.list_forecasters()
+
+        assert result == []

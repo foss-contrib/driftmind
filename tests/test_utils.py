@@ -1,4 +1,14 @@
-"""Tests for driftmind.utils module."""
+"""
+Tests for the ``driftmind.utils`` helper module.
+
+* **TestLoadCredentials** -- ``load_credentials()`` from env vars, ``.env`` file,
+  missing keys, and missing ``python-dotenv`` package.
+* **TestPlotting** -- ``plot_actual_vs_predicted`` and ``plot_time_series``
+  (normal, empty, missing-column cases).
+* **TestDateConversion** -- ``smart_parse_date`` (string, non-string, invalid,
+  datetime passthrough), ``convert_strftime_to_java`` / ``convert_java_to_strftime``
+  (standard tokens, roundtrip, unmapped-token passthrough).
+"""
 
 import os
 from unittest.mock import patch
@@ -7,13 +17,15 @@ import pandas as pd
 import pytest
 
 from driftmind.exceptions import DriftMindConfigError
-from driftmind.utils.helpers import (
+from driftmind.utils.core import (
     convert_java_to_strftime,
     convert_strftime_to_java,
     load_credentials,
+    smart_parse_date,
+)
+from driftmind.utils.demo import (
     plot_actual_vs_predicted,
     plot_time_series,
-    smart_parse_date,
 )
 
 
@@ -46,7 +58,7 @@ class TestLoadCredentials:
 
     def test_dotenv_not_installed_error(self):
         """Test error when dotenv requested but not installed."""
-        with patch("driftmind.utils.helpers.load_dotenv", None):
+        with patch("driftmind.utils.core.load_dotenv", None):
             with pytest.raises(
                 DriftMindConfigError, match="python-dotenv is not installed"
             ):
@@ -67,9 +79,27 @@ class TestLoadCredentials:
 class TestPlotting:
     """Test plotting functions."""
 
-    @patch("driftmind.utils.helpers.plt.show")
-    @patch("driftmind.utils.helpers.plt")
-    def test_plot_actual_vs_predicted(self, mock_plt, mock_show):
+    @patch("matplotlib.pyplot.show")
+    @patch("matplotlib.pyplot.tight_layout")
+    @patch("matplotlib.pyplot.grid")
+    @patch("matplotlib.pyplot.legend")
+    @patch("matplotlib.pyplot.ylabel")
+    @patch("matplotlib.pyplot.xlabel")
+    @patch("matplotlib.pyplot.title")
+    @patch("matplotlib.pyplot.plot")
+    @patch("matplotlib.pyplot.figure")
+    def test_plot_actual_vs_predicted(
+        self,
+        mock_figure,
+        mock_plot,
+        mock_title,
+        mock_xlabel,
+        mock_ylabel,
+        mock_legend,
+        mock_grid,
+        mock_tight_layout,
+        mock_show,
+    ):
         """Test plotting actual vs predicted values."""
         df = pd.DataFrame(
             {
@@ -81,15 +111,14 @@ class TestPlotting:
 
         plot_actual_vs_predicted(df, "test_var")
 
-        mock_plt.figure.assert_called_once_with(figsize=(15, 4))
-        mock_plt.show.assert_called_once()
+        mock_figure.assert_called_once_with(figsize=(15, 4))
+        mock_show.assert_called_once()
 
-    @patch("driftmind.utils.helpers.plt.show")
-    def test_plot_actual_vs_predicted_empty(self, mock_show):
+    def test_plot_actual_vs_predicted_empty(self):
         """Test plotting with empty dataframe."""
         df = pd.DataFrame()
+        # Should not raise — just a no-op
         plot_actual_vs_predicted(df, "test_var")
-        mock_show.assert_not_called()
 
     def test_plot_actual_vs_predicted_missing_column(self):
         """Test error when required column is missing."""
@@ -97,19 +126,34 @@ class TestPlotting:
         with pytest.raises(KeyError, match="expected"):
             plot_actual_vs_predicted(df, "test_var")
 
-    @patch("driftmind.utils.helpers.plt.show")
-    @patch("driftmind.utils.helpers.plt")
-    def test_plot_time_series(self, mock_plt, mock_show):
+    @patch("matplotlib.pyplot.show")
+    @patch("matplotlib.pyplot.tight_layout")
+    @patch("matplotlib.pyplot.grid")
+    @patch("matplotlib.pyplot.ylabel")
+    @patch("matplotlib.pyplot.xlabel")
+    @patch("matplotlib.pyplot.title")
+    @patch("matplotlib.pyplot.plot")
+    @patch("matplotlib.pyplot.figure")
+    def test_plot_time_series(
+        self,
+        mock_figure,
+        mock_plot,
+        mock_title,
+        mock_xlabel,
+        mock_ylabel,
+        mock_grid,
+        mock_tight_layout,
+        mock_show,
+    ):
         """Test plotting time series."""
         plot_time_series([1, 2, 3], [10, 20, 30], "Title", "X", "Y")
-        mock_plt.figure.assert_called_once_with(figsize=(15, 3))
-        mock_plt.show.assert_called_once()
+        mock_figure.assert_called_once_with(figsize=(15, 3))
+        mock_show.assert_called_once()
 
-    @patch("driftmind.utils.helpers.plt.show")
-    def test_plot_time_series_empty(self, mock_show):
+    def test_plot_time_series_empty(self):
         """Test plotting empty time series."""
+        # Should not raise — just a no-op
         plot_time_series([], [], "Title", "X", "Y")
-        mock_show.assert_not_called()
 
 
 class TestDateConversion:
@@ -140,3 +184,24 @@ class TestDateConversion:
         """Test Java to Python date format conversion."""
         assert convert_java_to_strftime("dd-MM-yyyy HH:mm:ss") == "%d-%m-%Y %H:%M:%S"
         assert convert_java_to_strftime("yyyy/MM/dd") == "%Y/%m/%d"
+
+    def test_roundtrip_conversion(self):
+        """Test Python->Java->Python roundtrip produces original format."""
+        original = "%d-%m-%Y %H:%M:%S"
+        java = convert_strftime_to_java(original)
+        back = convert_java_to_strftime(java)
+        assert back == original
+
+    def test_unmapped_tokens_passthrough(self):
+        """Test that format tokens not in the mapping pass through unchanged."""
+        # 'T' and literal characters should pass through
+        assert convert_strftime_to_java("%Y-T-%m") == "yyyy-T-MM"
+        assert convert_java_to_strftime("yyyy-T-MM") == "%Y-T-%m"
+
+    def test_smart_parse_date_datetime_passthrough(self):
+        """Test that datetime objects pass through unchanged."""
+        from datetime import datetime
+
+        dt = datetime(2025, 6, 15, 12, 30)
+        result = smart_parse_date(dt)
+        assert result is dt

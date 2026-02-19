@@ -37,7 +37,7 @@ These resources detail the **single-pass clustering mechanism** and **temporal t
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/thngbk/driftmind/actions/workflows/test.yml/badge.svg)](https://github.com/thngbk/driftmind/actions/workflows/test.yml)
-[![Test Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen.svg)](tests/TESTING.md)
+[![Test Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen.svg)](tests/TESTING.md)
 
 The **DriftMind Client** is a lightweight Python package that encapsulates the [DriftMind API](https://api.thingbook.io/access/swagger/index.html). It makes it easy to:
 
@@ -52,7 +52,7 @@ The **DriftMind Client** is a lightweight Python package that encapsulates the [
 - 🔒 Built-in credential protection in logs.
 - ✅ Comprehensive error handling with specific exceptions.
 - 📊 Pydantic v2 models with automatic validation.
-- 🧪 88% test coverage with 74 tests.
+- 🧪 92% test coverage with 117 tests.
 
 ---
 
@@ -162,12 +162,12 @@ uv run pre-commit install
 
 ### 🧪 Testing
 
-The DriftMind client includes a comprehensive test suite with **74 tests** achieving **88% code coverage**:
+The DriftMind client includes a comprehensive test suite with **117 tests** achieving **92% code coverage**:
 
-- **Client API tests** (37 tests) - All endpoints, success/error cases, bulk operations, native format mode
-- **Edge cases & logging** (7 tests) - Error handling, logging protection, contract extremes
-- **Model validation** (15 tests) - Pydantic serialization, field validation, Java date format
-- **Utils & plotting** (15 tests) - Credential loading, date conversion, plotting functions
+- **Client API tests** (58 tests) - All endpoints, success/error cases (400-422-500), bulk operations, native format mode, health check, Location header extraction
+- **Edge cases & resilience** (15 tests) - Constructor validation, logging protection, retry logic (5xx, 429, Timeout), contract extremes
+- **Model validation** (26 tests) - Pydantic serialization, field validation, Java date format, DataFeedPayload, FeaturePrediction, deletion response
+- **Utils & plotting** (18 tests) - Credential loading, date conversion (roundtrip, passthrough), plotting functions
 
 ```bash
 # Run all tests (coverage is enabled by default via pyproject.toml)
@@ -211,7 +211,7 @@ All API responses are automatically validated using Pydantic v2 models, ensuring
 
 ### 1. Import and Initialize
 
-The client handles authentication and session management automatically. Use the context manager for automatic resource cleanup.
+The client handles authentication and session management automatically. Use the context manager for automatic resource cleanup. **All snippets below assume the client is created once and reused.**
 
 ```python
 from driftmind import DriftMindClient
@@ -221,19 +221,19 @@ creds = load_credentials()
 
 # Recommended: Use context manager for automatic resource cleanup
 with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
+    api_key=creds["DRIFTMIND_API_KEY"],
     base_url=creds["DRIFTMIND_API_URL"]
 ) as client:
     # Verify connectivity (optional)
     if client.health_check():
         print("✓ Connected to DriftMind API")
-    
+
     # Your code here
     pass
 
 # Alternative: Manual cleanup
 client = DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
+    api_key=creds["DRIFTMIND_API_KEY"],
     base_url=creds["DRIFTMIND_API_URL"]
 )
 try:
@@ -263,8 +263,8 @@ with DriftMindClient(
 
 **Configuration Parameters:**
 
-| Parameter                   | Type    | Required | Default | Description                                                                          |
-|-----------------------------|---------|----------|---------|--------------------------------------------------------------------------------------|
+| Parameter                   | Type    | Required | Default | Description                                                                           |
+|-----------------------------|---------|----------|---------|---------------------------------------------------------------------------------------|
 | `api_key`                   | str     | ✅ Yes    | –       | API authentication key                                                               |
 | `base_url`                  | str     | ✅ Yes    | –       | DriftMind API endpoint URL                                                           |
 | `session`                   | Session | No       | None    | Custom requests.Session (for advanced use)                                            |
@@ -297,19 +297,15 @@ At minimum, you only need to specify:
 Example:
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    forecaster_payload = {
-        "forecaster_name": "Cold Start Demo",
-        "features": ["sin", "cos", "tan"],
-        "input_size": 15,
-        "output_size": 1,
-    }
+forecaster_payload = {
+    "forecaster_name": "Quickstart Demo",
+    "features": ["sin", "cos"],
+    "input_size": 10,
+    "output_size": 3,
+}
 
-    forecaster_info = client.create_forecaster(forecaster_payload)
-    forecaster_id = forecaster_info["forecaster_id"]
+forecaster_info = client.create_forecaster(forecaster_payload)
+forecaster_id = forecaster_info["forecaster_id"]
 ```
 
 If only these parameters are provided, DriftMind applies sensible defaults for the rest.
@@ -321,25 +317,21 @@ Fine-tune the online learning engine using `ForecasterSettingsBase` parameters.
 **Full example:**
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    forecaster_info = client.create_forecaster({
-        "forecaster_name": "Industrial Sensor Model",
-        "features": ["vibration", "temp"],
-        "input_size": 60,
-        "output_size": 5,
-        "max_clusters_allowed": 100,
-        "similarity_threshold": 0.85,
-        "timestamp_interval_in_seconds": 60,
-        "use_custom_date_format": True,
-        "date_format": "%d-%m-%Y %H:%M",  # Uses Python format; client converts to Java for API
-        "use_initialization_date": True,
-        "initialization_date": "2026-01-16 08:00:00"
-    })
+forecaster_info = client.create_forecaster({
+    "forecaster_name": "Industrial Sensor Model",
+    "features": ["vibration", "temp"],
+    "input_size": 60,
+    "output_size": 5,
+    "max_clusters_allowed": 100,
+    "similarity_threshold": 0.85,
+    "timestamp_interval_in_seconds": 60,
+    "use_custom_date_format": True,
+    "date_format": "%d-%m-%Y %H:%M",  # Uses Python format; client converts to Java for API
+    "use_initialization_date": True,
+    "initialization_date": "2026-01-16 08:00:00"
+})
 
-    forecaster_id = forecaster_info.get("forecaster_id")
+forecaster_id = forecaster_info["forecaster_id"]
 ```
 
 #### 📋 Parameter Reference
@@ -351,7 +343,7 @@ with DriftMindClient(
 | `input_size`                    | int    | ✅ Yes   | –                                  | Number of past points used as input.                                            |
 | `output_size`                   | int    | ✅ Yes   | –                                  | Number of future points to forecast.                                            |
 | `max_clusters_allowed`          | int    | No       | 200                                | Maximum number of clusters maintained.                                          |
-| `similarity_threshold`          | float  | No       | 0.8                                | Similarity threshold (0–1) for assigning points to clusters.                    |
+| `similarity_threshold`          | float  | No       | 0.8                                | Similarity threshold (0.6–1.0) for assigning points to clusters.                |
 | `timestamp_interval_in_seconds` | int    | No       | 60                                 | Expected interval between points expressed in seconds.                          |
 | `fit_rate`                      | int    | No       | 1                                  | Frequency of model updates (lower = faster adaptation).                         |
 | `use_custom_date_format`        | bool   | No       | False                              | Whether to parse timestamps with a custom format.                               |
@@ -372,48 +364,39 @@ Feeding data trains the forecaster using **online learning**—the model updates
 Data must be in **columnar format**: a dictionary where keys are feature names and values are lists of numeric observations.
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    # Feed single or multiple points
-    data = {
-        "sin": [0.12, 0.24, 0.36],
-        "cos": [0.34, 0.45, 0.56]
-    }
-    client.feed_point(forecaster_id, data)
+# Feed single or multiple points
+data = {
+    "sin": [0.12, 0.24, 0.36],
+    "cos": [0.34, 0.45, 0.56]
+}
+client.feed_point(forecaster_id, data)
 ```
 
 **Bulk feeding multiple forecasters:**
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    payload = {
-        "payloads_list": [
-            {
-                "forecaster_id": forecaster_id_1,
-                "data": {
-                    "motor_temp_c": [18.0, 19.5, 20.1, 20.7],
-                    "power_kw": [0.62, 0.60, 0.58, 0.59],
-                    "vibration_g": [1012.2, 1012.5, 1012.1, 1011.9]
-                }
-            },
-            {
-                "forecaster_id": forecaster_id_2,
-                "data": {
-                    "temperature": [22.5, 23.1, 23.8],
-                    "humidity": [0.65, 0.63, 0.61]
-                }
+payload = {
+    "payloads_list": [
+        {
+            "forecaster_id": forecaster_id_1,
+            "data": {
+                "sin": [0.12, 0.24, 0.36],
+                "cos": [0.34, 0.45, 0.56]
             }
-        ]
-    }
+        },
+        {
+            "forecaster_id": forecaster_id_2,
+            "data": {
+                "sin": [0.48, 0.60],
+                "cos": [0.67, 0.78]
+            }
+        }
+    ]
+}
 
-    result = client.bulk_feed_data(payload)
-    for r in result["results"]:
-        print(f"{r['forecaster_id']}: {r['message']}")
+result = client.bulk_feed_data(payload)
+for r in result["results"]:
+    print(f"{r['forecaster_id']}: {r['message']}")
 ```
 
 **Timestamp assignment:**
@@ -431,14 +414,13 @@ with DriftMindClient(
 Retrieve the historical observations currently stored in the forecaster's memory.
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    history = client.get_forecaster_data(forecaster_id)
+history = client.get_forecaster_data(forecaster_id)
 
-    for timestamp, features in history.items():
-        print(f"Time: {timestamp} | Data: {features}")
+# The API may wrap data under a "data" key
+data = history.get("data", history) if isinstance(history, dict) else history
+
+for timestamp, features in data.items():
+    print(f"Time: {timestamp} | Data: {features}")
 ```
 
 ---
@@ -460,19 +442,15 @@ For example, with `input_size=20` and `output_size=5`, you need 25 points before
 ```
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    result = client.forecast(forecaster_id)
+result = client.forecast(forecaster_id)
 
-    print(f"Global Anomaly Score: {result['anomaly_score']}")
+print(f"Global Anomaly Score: {result['anomaly_score']}")
 
-    for feature_name, pred in result["features"].items():
-        print(f"--- {feature_name} ---")
-        print(f"Method: {pred['forecasting_method']}")
-        print(f"Next Value: {pred['predictions'][0]}")
-        print(f"Confidence: [{pred['lower_confidence'][0]}, {pred['upper_confidence'][0]}]")
+for feature_name, pred in result["features"].items():
+    print(f"--- {feature_name} ---")
+    print(f"Method: {pred['forecasting_method']}")
+    print(f"Next Value: {pred['predictions'][0]}")
+    print(f"Confidence: [{pred['lower_confidence'][0]}, {pred['upper_confidence'][0]}]")
 ```
 
 ---
@@ -486,13 +464,9 @@ with DriftMindClient(
 Get a high-level overview of all tracked objects.
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    forecasters = client.list_forecasters()
-    for f in forecasters:
-        print(f"{f['object_name']} (ID: {f['object_id']}) - Processed: {f['data_processed']} MB")
+forecasters = client.list_forecasters()
+for f in forecasters:
+    print(f"{f['object_name']} (ID: {f['object_id']}) - Processed: {f['data_processed']} MB")
 ```
 
 #### Get Detailed Stats
@@ -500,18 +474,14 @@ with DriftMindClient(
 Retrieve configuration and live feature statistics (like cluster counts and anomaly scores).
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    details = client.get_forecaster_details(forecaster_id)
+details = client.get_forecaster_details(forecaster_id)
 
-    # Configuration is under the 'configuration' key
-    print(f"Input Size: {details['configuration']['input_size']}")
+# Configuration is under the 'configuration' key
+print(f"Input Size: {details['configuration']['input_size']}")
 
-    # Per-feature stats
-    for name, stats in details["features"].items():
-        print(f"Feature {name} has {stats['active_clusters']} active clusters.")
+# Per-feature stats
+for name, stats in details["features"].items():
+    print(f"Feature {name} has {stats['active_clusters']} active clusters.")
 ```
 
 ---
@@ -523,23 +493,19 @@ with DriftMindClient(
 Delete a specific forecaster or perform a bulk wipe.
 
 ```python
-with DriftMindClient(
-    api_key=creds["DRIFTMIND_API_KEY"], 
-    base_url=creds["DRIFTMIND_API_URL"]
-) as client:
-    # Delete one
-    client.delete_forecaster(forecaster_id)
+# Delete one
+client.delete_forecaster(forecaster_id)
 
-    # Delete all (Bulk Operation)
-    # Note: Deletes sequentially as API doesn't provide bulk deletion
-    results = client.delete_all_forecasters()
-    
-    # Check results
-    for result in results["results"]:
-        if result["status"] == 200:
-            print(f"✓ Deleted {result['forecaster_id']}")
-        else:
-            print(f"✗ Failed to delete {result['forecaster_id']}: {result['message']}")
+# Delete all (Bulk Operation)
+# Note: Deletes sequentially as API doesn't provide bulk deletion
+results = client.delete_all_forecasters()
+
+# Check results
+for result in results["results"]:
+    if result["status"] == 200:
+        print(f"✓ Deleted {result['forecaster_id']}")
+    else:
+        print(f"✗ Failed to delete {result['forecaster_id']}: {result['message']}")
 ```
 
 ---
@@ -608,7 +574,7 @@ Run it with: `uv run python examples/quickstart.py`
 - Visualization of actual vs predicted values
 - Anomaly score and cluster evolution plots
 
-To run the notebook, install the examples dependencies (JupyterLab + Plotly):
+To run the notebook, install the examples dependencies (JupyterLab, Plotly, NumPy, Pandas, and Matplotlib):
 ```bash
 uv sync --extra examples
 uv run jupyter lab examples/demo.ipynb
@@ -635,7 +601,11 @@ If you see an error like `error: Microsoft Visual C++ 14.0 or greater is require
 Before performing complex operations, use `health_check()` to verify connectivity and credentials:
 
 ```python
+from driftmind import DriftMindClient
 from driftmind.exceptions import DriftMindApiError, DriftMindError
+from driftmind.utils import load_credentials
+
+creds = load_credentials()
 
 with DriftMindClient(
     api_key=creds["DRIFTMIND_API_KEY"],
