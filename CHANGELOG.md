@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `use_api_native_format` option on `DriftMindClient`: when enabled, the client accepts camelCase input dictionaries and returns camelCase output keys, matching the raw API format. Provides backwards compatibility for users migrating from pre-v0.3 clients. The existing `accept_java_date_format` option remains independent.
+- `docs/API_NATIVE.md` documenting the `use_api_native_format` option with usage examples and migration guidance for pre-v0.3 users.
 - GitHub Actions workflow for automated PyPI publishing on version tags (`publish.yml`) with Trusted Publishing and tag-version verification.
 - Expanded test suite from 74 to 117 tests (92% coverage, up from 88%). New coverage includes `health_check`, retry logic (5xx/429/Timeout), error paths (401/403/404/417/500), model edge cases, and date conversion roundtrip.
 - Native format test suite (`TestNativeFormatClient`) with camelCase input fixtures covering all endpoints.
