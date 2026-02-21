@@ -32,6 +32,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "python-dateutil>=2.9.0.post0",
     "pydantic>=2.10.6",
+    "eval-type-backport>=0.2.0",
 ]
 
 [dependency-groups]
