@@ -150,6 +150,11 @@ DRIFTMIND_API_KEY=<your_api_key>
 DRIFTMIND_API_URL=https://api.thingbook.io/access/api/driftmind
 ```
 
+> **Note on authentication headers:** The DriftMind API uses a non-standard `Auth` header (not the conventional `Authorization: Bearer <token>`). The client sets this automatically — but if you are making raw HTTP requests (e.g. via curl or Postman), use:
+> ```
+> Auth: <your_api_key>
+> ```
+
 ---
 
 ## 🧪 Development & Testing
