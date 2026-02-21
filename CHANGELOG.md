@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected `timeStampIntervalInSeconds` API misspelling: users now see `timestampIntervalInSeconds` (camelCase) or `timestamp_interval_in_seconds` (snake_case). The client handles the API's misspelling transparently.
 - Added `plotly` to `examples` optional dependency.
 - Fixed notebook install instructions in README.md to use `uv sync --extra examples`.
-- Restored Python 3.9 compatibility (broken by the v0.4.1 minimum-version bump): added `from __future__ import annotations` to `exceptions.py` and `eval-type-backport` as a dependency so Pydantic v2 can evaluate `X | None` annotations at runtime on Python 3.9.
+- Restored Python 3.9 compatibility (broken by the v0.4.1 minimum-version bump): added `from __future__ import annotations` to `exceptions.py`; added `eval-type-backport` as a dependency so Pydantic v2 can evaluate `X | None` annotations at runtime on Python 3.9; added `__init__.py` to `driftmind/data` so `importlib.resources.files()` resolves correctly on Python 3.9.
 
 ### Changed
 - Renamed `utils/helpers.py` → `utils/core.py` and `utils/generator.py` → `utils/demo.py` for clearer module naming.
