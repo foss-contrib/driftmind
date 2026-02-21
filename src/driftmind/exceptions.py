@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class DriftMindError(Exception):
     """Base exception for DriftMind client errors."""
 

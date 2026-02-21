@@ -108,9 +108,10 @@ def generate_sin_cos_tan_with_drifts(
 
     # Add noise if specified
     if noise_std > 0.0:
-        sin_vals += rng.normal(0.0, noise_std, n)
-        cos_vals += rng.normal(0.0, noise_std, n)
-        tan_vals += rng.normal(0.0, noise_std, n)
+        noise = rng.normal(0.0, noise_std, (n, 3))
+        sin_vals += noise[:, 0]
+        cos_vals += noise[:, 1]
+        tan_vals += noise[:, 2]
 
     df = pd.DataFrame(
         {
