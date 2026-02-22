@@ -747,5 +747,5 @@ with DriftMindClient(
 
 - [README.md](../README.md) - Getting started guide
 - [examples/quickstart.py](../examples/quickstart.py) - Runnable example
-- [examples/demo.ipynb](../examples/demo.ipynb) - Interactive demo
+- [examples/cold_start_demo.ipynb](../examples/cold_start_demo.ipynb) - Interactive demo
 - [tests/TESTING.md](../tests/TESTING.md) - Testing documentation

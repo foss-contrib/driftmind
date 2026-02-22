@@ -578,7 +578,7 @@ with DriftMindClient(
 
 Run it with: `uv run python examples/quickstart.py`
 
-**2. Jupyter Notebook** ([`examples/demo.ipynb`](examples/demo.ipynb)) - Interactive demo with:
+**2. Jupyter Notebook** ([`examples/cold_start_demo.ipynb`](examples/cold_start_demo.ipynb)) - Interactive demo with:
 
 - Synthetic data generation with drifts
 - Online learning loop (600 iterations)
@@ -589,11 +589,11 @@ To run the notebook:
 ```bash
 # If installed from PyPI:
 uv pip install driftmind[examples]
-jupyter lab examples/demo.ipynb
+jupyter lab examples/cold_start_demo.ipynb
 
 # If working from a cloned repo:
 uv sync --extra examples
-uv run jupyter lab examples/demo.ipynb
+uv run jupyter lab examples/cold_start_demo.ipynb
 ```
 
 ---
@@ -667,7 +667,7 @@ DriftMindError: forecaster_id cannot be empty or whitespace
 - **[docs/API.md](docs/API.md)** - Complete API reference with input/output formats
 - **[docs/API_NATIVE.md](docs/API_NATIVE.md)** - API reference for camelCase (native format) mode
 - **[examples/quickstart.py](examples/quickstart.py)** - Runnable Python example
-- **[examples/demo.ipynb](examples/demo.ipynb)** - Interactive Jupyter notebook
+- **[examples/cold_start_demo.ipynb](examples/cold_start_demo.ipynb)** - Interactive Jupyter notebook
 - **[tests/TESTING.md](tests/TESTING.md)** - Testing documentation
 
 ---

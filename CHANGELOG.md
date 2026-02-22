@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Renamed `utils/helpers.py` → `utils/core.py` and `utils/generator.py` → `utils/demo.py` for clearer module naming.
+- Renamed back `examples/demo.ipynb` → `examples/cold_start_demo.ipynb` for better understanding of its purpose.
 - Moved `numpy`, `pandas`, `matplotlib` from core dependencies to `[examples]` optional extra, lightening the default install.
 - Moved plotting functions (`plot_actual_vs_predicted`, `plot_time_series`) from `utils/core` to `utils/demo` with lazy imports.
 - Updated CI test workflow: upgraded `astral-sh/setup-uv` from v4 to v5, pinned Python 3.9, consolidated lint and format into a single step, simplified test command.
